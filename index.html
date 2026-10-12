@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta property="og:title" content="დოლაბაური — 3D">
-<meta property="og:description" content="სამსართულიანი სახლი, 6 ბინა — ინტერაქტიული 3D მოდელი.">
+<meta property="og:description" content="დოლაბაური — სამსართულიანი სახლი, 6 ბინა: ინტერაქტიული 3D მოდელი, დიზაინი, განათება, ინჟინერია.">
 <meta property="og:image" content="icon-512.png">
 <title>დოლაბაური</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -283,7 +283,7 @@ h1 em{font-style:normal}
 </head>
 <body>
 <div id="app" lang="ka">
-  <div id="stage" aria-label="დოლაბაურის ინტერაქტიული 3D მოდელი"></div>
+  <div id="stage" aria-label="დოლაბაური — ინტერაქტიული 3D მოდელი"></div>
   <div id="loading"><div class="ld">დოლაბაური</div><p>სახლს ვაგებთ…</p></div>
 
   <section id="left" class="panel" aria-label="შენობა და ბინები">
@@ -348,9 +348,10 @@ h1 em{font-style:normal}
 </div>
 
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.8.3/build/index.module.js","three-gpu-pathtracer":"https://cdn.jsdelivr.net/npm/three-gpu-pathtracer@0.0.23/build/index.module.js"}}
 </script>
 <script type="module">
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -360,12 +361,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
-/* =====================================================================
-   DOLABAURI — 3 floors × 2 apartments. Metres, x → east, z → south.
-   Floor-to-floor 3.0 m, clear ceiling 2.8 m (assumed). Neighbour house 0.2 m east.
-   ===================================================================== */
-const FH = 3.0, H = 2.8, DOOR_H = 2.3, ENTRY_H = 2.2, SILL = 0.9, HEAD = 2.2, LOW = 1.0;
+const DOOR_H = 2.3, ENTRY_H = 2.2, LOW = 1.0;
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -378,6 +380,40 @@ function hashStr(str) { let h = 2166136261; for (let i = 0; i < str.length; i++)
 const NV = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
 const rc = r => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
 const rArea = r => (r[2] - r[0]) * (r[3] - r[1]);
+
+const MX = x => +(10 - x).toFixed(3);
+const mF = f => ({ E: 'W', W: 'E' })[f] || f;
+function mirrorWall(w, A, B) {
+  const r = (s) => s.replace(`${A}:`, `${B}:`);
+  const o = { ...w, g: B, neg: r(w.neg), pos: r(w.pos) };
+  if (w.h) { o.from = MX(w.to); o.to = MX(w.from); o.open = (w.open || []).map(([s, e, k, ...x]) => [MX(e), MX(s), k, ...x]); }
+  else { o.c = MX(w.c); o.neg = r(w.pos); o.pos = r(w.neg); }
+  return o;
+}
+function mirrorDoor(d, B) { return { ...d, g: B, hinge: [MX(d.hinge[0]), d.hinge[1]], dir: [-d.dir[0], d.dir[1]], n: [-d.n[0], d.n[1]] }; }
+
+function mirrorP(P) {
+  const Q = JSON.parse(JSON.stringify(P));
+  const mR = r => [MX(r[2]), r[1], MX(r[0]), r[3]], m2 = p => [MX(p[0]), p[1]], m3 = p => [MX(p[0]), p[1], p[2]];
+  Q.rooms.forEach(r => { r.r = mR(r.r); if (r.sub) r.sub = mR(r.sub); r.walk.p = m2(r.walk.p); r.walk.look = m3(r.walk.look); });
+  Q.entryPt = m2(Q.entryPt);
+  Q.cove = Q.cove.map(s => [MX(s[0]), s[1], MX(s[2]), s[3]]);
+  Q.beds.forEach(b => { b.r = mR(b.r); b.head = mF(b.head); b.ns = b.ns.map(mR); });
+  Q.wardrobes.forEach(w => { w.r = mR(w.r); w.face = mF(w.face); });
+  Q.sofa.forEach(s => { s.r = mR(s.r); s.backs = (s.backs || []).map(mF); s.arms = (s.arms || []).map(mF); });
+  const t = Q.tv; t.face = mF(t.face); if (t.face === 'E' || t.face === 'W') t.wall = MX(t.wall); else { [t.a0, t.a1] = [MX(t.a1), MX(t.a0)]; t.panel = [MX(t.panel[1]), MX(t.panel[0])]; }
+  Q.dining.r = mR(Q.dining.r); Q.dining.chairs = Q.dining.chairs.map(c => [MX(c[0]), c[1], mF(c[2])]);
+  Q.kitchen.r = mR(Q.kitchen.r); Q.kitchen.face = mF(Q.kitchen.face);
+  const B = Q.bath; B.vanity.r = mR(B.vanity.r); B.vanity.face = mF(B.vanity.face); B.washer.r = mR(B.washer.r); B.washer.face = mF(B.washer.face);
+  B.toilet.ledge = mR(B.toilet.ledge); B.toilet.bowl = mR(B.toilet.bowl);
+  B.shower.r = mR(B.shower.r); B.shower.glass = B.shower.glass.map(m2); B.shower.head = m2(B.shower.head);
+  const n = B.shower.niche; if (n.ax === 'x') [n.a0, n.a1] = [MX(n.a1), MX(n.a0)]; else n.x = MX(n.x);
+  Q.lamp.base = m2(Q.lamp.base); Q.lamp.shade = m3(Q.lamp.shade);
+  Q.rugs = Q.rugs.map(mR); Q.plants = Q.plants.map(m2);
+  Q.switches.forEach(s => { s.p = m2(s.p); s.n = mF(s.n); });
+  Q.sockets.forEach(s => { s.p = m2(s.p); s.n = mF(s.n); });
+  return Q;
+}
 
 /* ---------- finish packages ---------- */
 const STYLES = {
@@ -456,302 +492,447 @@ const FIXSPEC = {
   night: ['ღამის ბილიკი', 'საწოლის ქვეშა ზოლი · 2200 K · მოძრაობის სენსორი · 10 %'],
 };
 
-/* =====================================================================
-   FLOOR STRUCTURE
-   ===================================================================== */
-const MX = x => +(10 - x).toFixed(3);
-const mF = f => ({ E: 'W', W: 'E' })[f] || f;
-function mirrorWall(w, A, B) {
-  const r = (s) => s.replace(`${A}:`, `${B}:`);
-  const o = { ...w, g: B, neg: r(w.neg), pos: r(w.pos) };
-  if (w.h) { o.from = MX(w.to); o.to = MX(w.from); o.open = (w.open || []).map(([s, e, k, ...x]) => [MX(e), MX(s), k, ...x]); }
-  else { o.c = MX(w.c); o.neg = r(w.pos); o.pos = r(w.neg); }
-  return o;
-}
-function mirrorDoor(d, B) { return { ...d, g: B, hinge: [MX(d.hinge[0]), d.hinge[1]], dir: [-d.dir[0], d.dir[1]], n: [-d.n[0], d.n[1]] }; }
-
-function floor1() {
-  const walls = [
-    { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: [[0.65, 3.16, 'win']] },
-    { g: '2', h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F1', pos: '2:wall', ext: [0, -1], open: [[5.2, 6.15, 'entry'], [7.5, 9.6, 'win']] },
-    { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [[0.4, 2.8, 'win'], [3.25, 4.15, 'entry'], [4.35, 6.73, 'win'], [7.15, 8.3, 'win']] },
-    { g: '2', h: 0, c: 9.9, from: 0, to: 3.08, t: 0.2, neg: '2:accent', pos: 'F1', ext: [1, 0] },
-    { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [[3.69, 6.15, 'win'], [7.2, 9.6, 'win']] },
-    { g: '1', h: 1, c: 9.95, from: 0, to: 3.3, t: 0.2, neg: '1:accent', pos: 'F1', ext: [0, 1] },
-    { g: '1', h: 1, c: 9.95, from: 3.3, to: 5.0, t: 0.2, neg: '1:bathWall', pos: 'F1', ext: [0, 1] },
-    { g: '2', h: 1, c: 9.95, from: 5.0, to: 6.61, t: 0.2, neg: '2:bathWall', pos: 'F1', ext: [0, 1] },
-    { g: '2', h: 1, c: 9.95, from: 6.61, to: 10.0, t: 0.2, neg: '2:accent', pos: 'F1', ext: [0, 1] },
-    { g: 'S1', h: 0, c: 5.0, from: 0.2, to: 3.08, t: 0.15, neg: '1:accent', pos: '2:wall', party: 1 },
-    { g: 'S1', h: 0, c: 5.0, from: 3.08, to: 4.2, t: 0.15, neg: '1:wall', pos: '2:wall', party: 1 },
-    { g: 'S1', h: 0, c: 5.0, from: 4.2, to: 6.3, t: 0.15, neg: '1:backsplash', pos: '2:backsplash', party: 1 },
-    { g: 'S1', h: 0, c: 5.0, from: 6.3, to: 6.96, t: 0.15, neg: '1:wall', pos: '2:wall', party: 1 },
-    { g: 'S1', h: 0, c: 5.0, from: 6.96, to: 9.85, t: 0.15, neg: '1:bathWall', pos: '2:bathWall', party: 1 },
-    { g: '1', h: 1, c: 3.08, from: 0.2, to: 4.925, t: 0.1, neg: '1:wall', pos: '1:wall', open: [[3.4, 4.2, 'door']] },
-    { g: '1', h: 1, c: 6.96, from: 0.2, to: 3.3, t: 0.1, neg: '1:wall', pos: '1:wall', open: [[2.45, 3.25, 'door']] },
-    { g: '1', h: 1, c: 6.96, from: 3.3, to: 4.925, t: 0.1, neg: '1:wall', pos: '1:bathWall', open: [[3.42, 4.18, 'door']] },
-    { g: '1', h: 0, c: 3.3, from: 7.01, to: 9.85, t: 0.1, neg: '1:wall', pos: '1:bathWall' },
-    { g: '2', h: 0, c: 6.64, from: 0.2, to: 3.08, t: 0.1, neg: '2:wall', pos: '2:wall', open: [[0.3, 1.05, 'door']] },
-    { g: '2', h: 1, c: 3.08, from: 6.59, to: 9.8, t: 0.1, neg: '2:wall', pos: '2:wall' },
-    { g: '2', h: 1, c: 6.96, from: 5.075, to: 6.61, t: 0.1, neg: '2:wall', pos: '2:bathWall', open: [[5.72, 6.52, 'door']] },
-    { g: '2', h: 1, c: 6.96, from: 6.61, to: 9.8, t: 0.1, neg: '2:wall', pos: '2:wall', open: [[6.7, 7.5, 'door']] },
-    { g: '2', h: 0, c: 6.61, from: 7.01, to: 9.85, t: 0.1, neg: '2:bathWall', pos: '2:wall' },
-  ];
-  const doors = [
-    { g: '1', hinge: [0.1, 4.15], dir: [0, -1], n: [-1, 0], w: 0.85, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 },
-    { g: '1', hinge: [4.2, 3.08], dir: [-1, 0], n: [0, -1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
-    { g: '1', hinge: [3.25, 6.96], dir: [-1, 0], n: [0, 1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
-    { g: '1', hinge: [4.18, 6.96], dir: [-1, 0], n: [0, -1], w: 0.76, ang: 70, t: 0.1, h: DOOR_H },
-    { g: '2', hinge: [5.2, 0.1], dir: [1, 0], n: [0, -1], w: 0.95, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 },
-    { g: '2', hinge: [6.64, 0.3], dir: [0, 1], n: [1, 0], w: 0.75, ang: 75, t: 0.1, h: DOOR_H },
-    { g: '2', hinge: [5.72, 6.96], dir: [1, 0], n: [0, -1], w: 0.8, ang: 70, t: 0.1, h: DOOR_H },
-    { g: '2', hinge: [7.5, 6.96], dir: [-1, 0], n: [0, 1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
-  ];
-  return { walls, doors };
-}
-function floorUp(f) {
-  const A = f === 2 ? '3' : '5', B = f === 2 ? '4' : '6', S = 'S' + f;
-  const walls = [
-    { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: f === 2 ? [[0.4, 2.1, 'win'], [2.7, 3.6, 'win']] : [[0.53, 2.04, 'win'], [2.96, 4.49, 'win']] },
-    { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: f === 2 ? [[5.4, 7.1, 'win'], [8.1, 9.5, 'win']] : [[5.4, 7.1, 'win'], [8.03, 9.55, 'win']] },
-    { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: f === 2 ? [[0.8, 3.2, 'win'], [4.3, 6.6, 'win'], [6.85, 9.25, 'win']] : [[1.15, 2.66, 'win'], [4.3, 9.26, 'win']] },
-    { g: B, h: 0, c: 9.9, from: 0, to: 10.05, t: 0.2, neg: B + ':wall', pos: 'F', ext: [1, 0] },
-    { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[0.35, 2.35, 'win'], [2.65, 3.55, 'entry']] : [[0.67, 3.2, 'win']] },
-    { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry']] : [] },
-    { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], [7.7, 9.6, 'win']] : [[6.55, 9.04, 'win']] },
-    { g: S, h: 0, c: 5.0, from: 0.2, to: 3.93, t: 0.15, neg: A + ':wall', pos: B + ':wall', party: 1 },
-    { g: S, h: 0, c: 5.0, from: 3.93, to: 6.9, t: 0.15, neg: A + ':bathWall', pos: B + ':bathWall', party: 1 },
-    { g: S, h: 0, c: 4.1, from: 6.85, to: 8.85, t: 0.1, neg: A + ':backsplash', pos: 'H' },
-    { g: S, h: 0, c: 4.1, from: 8.85, to: 9.85, t: 0.1, neg: A + ':wall', pos: 'H', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
-    { g: S, h: 0, c: 5.9, from: 6.85, to: 8.85, t: 0.1, neg: 'H', pos: B + ':backsplash' },
-    { g: S, h: 0, c: 5.9, from: 8.85, to: 9.85, t: 0.1, neg: 'H', pos: B + ':wall', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
-  ];
-  const inner = [
-    { g: A, h: 0, c: 2.45, from: 0.2, to: 3.93, t: 0.1, neg: A + ':wall', pos: A + ':wall' },
-    { g: A, h: 1, c: 3.93, from: 0.2, to: 3.4, t: 0.1, neg: A + ':wall', pos: A + ':wall', open: [[1.0, 1.8, 'door'], [2.55, 3.3, 'door']] },
-    { g: A, h: 1, c: 3.93, from: 3.4, to: 4.925, t: 0.1, neg: A + ':wall', pos: A + ':bathWall' },
-    { g: A, h: 0, c: 3.4, from: 3.98, to: 6.9, t: 0.1, neg: A + ':wall', pos: A + ':bathWall', open: [[6.05, 6.8, 'door']] },
-    { g: A, h: 1, c: 6.9, from: 3.35, to: 4.05, t: 0.1, neg: A + ':bathWall', pos: A + ':wall' },
-    { g: A, h: 1, c: 6.9, from: 4.05, to: 4.925, t: 0.1, neg: A + ':bathWall', pos: 'H' },
-  ];
-  for (const w of inner) { walls.push(w); walls.push(mirrorWall(w, A, B)); }
-  const dA = [
-    { g: A, hinge: [1.8, 3.93], dir: [-1, 0], n: [0, -1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
-    { g: A, hinge: [2.55, 3.93], dir: [1, 0], n: [0, -1], w: 0.75, ang: 80, t: 0.1, h: DOOR_H },
-    { g: A, hinge: [3.4, 6.8], dir: [0, -1], n: [1, 0], w: 0.75, ang: 70, t: 0.1, h: DOOR_H },
-    f === 2 ? { g: A, hinge: [3.55, 9.95], dir: [-1, 0], n: [0, 1], w: 0.9, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 }
-      : { g: A, hinge: [4.1, 8.95], dir: [0, 1], n: [-1, 0], w: 0.85, ang: 70, t: 0.1, h: DOOR_H, entry: 1 },
-  ];
-  const doors = [];
-  for (const d of dA) { doors.push(d); doors.push(mirrorDoor(d, B)); }
-  if (f === 2) doors.push({ g: S, hinge: [4.25, 9.95], dir: [1, 0], n: [0, 1], w: 0.8, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 });
-  return { walls, doors };
-}
 
 /* =====================================================================
-   APARTMENT PROGRAMS (furniture, lighting anchors, switches, sockets)
+   PROJECT: DOLABAURI — 3 floors × 2 apartments, footprint 10.0 × 10.05 m.
+   Sloped site: street on the south at floor-2 level. Neighbour house 0.2 m east.
    ===================================================================== */
-const P1A = {
-  rooms: [
-    { id: 'living', name: 'მისაღები · სამზარეულო', r: [0.2, 3.13, 4.925, 6.91], walk: { p: [3.6, 6.45], look: [0.8, 1.1, 4.0] } },
-    { id: 'bed1', name: 'საძინებელი 1', r: [0.2, 0.2, 4.925, 3.03], walk: { p: [3.75, 2.7], look: [1.0, 1.0, 0.7] } },
-    { id: 'bed2', name: 'საძინებელი 2', r: [0.2, 7.01, 3.25, 9.85], walk: { p: [2.85, 7.4], look: [1.1, 0.8, 9.4] } },
-    { id: 'bath', name: 'სააბაზანო', r: [3.35, 7.01, 4.925, 9.85], walk: { p: [4.35, 8.45], look: [3.6, 1.1, 7.4] } },
-  ],
-  entryPt: [0.9, 3.7],
-  cove: [[0.27, 3.2, 0.27, 6.84], [0.27, 3.2, 4.86, 3.2], [0.27, 6.84, 4.2, 6.84]],
-  beds: [
-    { r: [2.775, 0.55, 4.875, 2.15], head: 'E', room: 'bed1', ns: [[4.5, 0.2, 4.9, 0.5], [4.5, 2.2, 4.9, 2.5]], read: 'globe' },
-    { r: [0.6, 7.75, 2.2, 9.85], head: 'S', room: 'bed2', ns: [[0.22, 9.45, 0.56, 9.85], [2.24, 9.45, 2.6, 9.85]], read: 'sconce' },
-  ],
-  wardrobes: [{ r: [0.2, 2.43, 3.2, 3.03], face: 'N' }, { r: [2.65, 8.0, 3.25, 9.85], face: 'W' }],
-  desk: { r: [0.9, 0.2, 2.3, 0.75], face: 'S', chair: [1.6, 1.05, 'N'] },
-  sofa: [{ r: [0.2, 5.25, 1.1, 6.0], arms: ['W'] }, { r: [0.2, 6.0, 2.4, 6.9], backs: ['S'], arms: ['W', 'E'] }],
-  tv: { face: 'S', wall: 3.13, a0: 0.6, a1: 1.8, panel: [0.5, 2.0] },
-  dining: { r: [2.55, 4.35, 3.95, 5.2], chairs: [[2.9, 4.22, 'S'], [3.6, 4.22, 'S'], [2.9, 5.33, 'N'], [3.6, 5.33, 'N']] },
-  kitchen: { r: [4.325, 4.2, 4.925, 6.25], face: 'W', fridge: [4.2, 4.8], hob: 5.15, sink: 5.85 },
-  bath: {
-    vanity: { r: [3.35, 7.2, 3.8, 7.8], face: 'E', mirror: [7.22, 7.78] }, washer: { r: [3.35, 8.0, 3.95, 8.6], face: 'E' },
-    toilet: { ledge: [4.745, 7.05, 4.925, 7.8], bowl: [4.27, 7.23, 4.745, 7.61] },
-    shower: { r: [3.35, 8.9, 4.925, 9.85], glass: [[3.35, 8.9], [4.3, 8.9]], head: [4.1, 9.4], niche: { ax: 'x', z: 9.845, a0: 3.5, a1: 4.2 } },
-  },
-  lamp: { base: [2.65, 6.7], shade: [1.6, 1.7, 6.2] },
-  rugs: [[0.7, 3.9, 2.45, 5.9], [2.4, 0.35, 4.6, 2.35], [0.4, 7.4, 2.4, 9.4]],
-  plants: [[2.3, 3.45]],
-  switches: [
-    { id: 'ჩ1', room: 'შესასვლელი', p: [0.38, 3.13], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, გვერდით კედელზე. ქვედა ღილაკი გასვლისას ბინაში ყველა სანათს თიშავს.' },
-    { id: 'ჩ2', room: 'მისაღები', p: [3.22, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებელი 1-ის კართან, მისაღების მხარეს. შესასვლელის პანელთან ერთად ორი ადგილიდან იმართება.' },
-    { id: 'ჩ3', room: 'საძინებელი 1', p: [3.22, 3.03], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს — ხელი მიგიწვდებათ, სანამ კარი ბოლომდე გაიღება.' },
-    { id: 'ჩ4', room: 'საძინებელი 1', p: [4.925, 0.36], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ — ჭერის შუქს ადგომის გარეშე ჩააქრობთ.' },
-    { id: 'ჩ5', room: 'საძინებელი 1', p: [4.925, 2.34], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'საწოლის მეორე მხარეს; მესამე ღილაკი ღამის ბილიკს რთავს.' },
-    { id: 'ჩ6', room: 'საძინებელი 2', p: [2.27, 7.01], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-    { id: 'ჩ7', room: 'საძინებელი 2', p: [0.39, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-    { id: 'ჩ8', room: 'საძინებელი 2', p: [2.42, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
-    { id: 'ჩ9', room: 'სააბაზანო', p: [3.335, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში. გამწოვი ტენიანობის სენსორით მუშაობს.' },
-    { id: 'ჩ10', room: 'სამზარეულო', p: [4.925, 4.88], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'კედელში ყუთი არ სჭირდება — შეეხეთ თაროს პროფილის ბოლოს.' },
-  ],
-  sockets: [
-    { p: [1.2, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
-    { p: [0.2, 5.1], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
-    { p: [3.25, 4.78], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
-    { p: [4.925, 5.5], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
-    { p: [4.925, 6.15], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
-    { p: [4.925, 4.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
-    { p: [4.925, 0.36], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-    { p: [4.925, 2.34], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-    { p: [2.5, 0.2], n: 'S', h: 0.3, kind: 'სამუშაო მაგიდასთან ორმაგი + ინტერნეტი', room: 'საძინებელი 1' },
-    { p: [0.39, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-    { p: [2.42, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-    { p: [3.35, 7.95], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
-    { p: [3.35, 8.45], n: 'E', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
-  ],
-};
-const P1B = {
-  rooms: [
-    { id: 'hall', name: 'შესასვლელი', r: [5.075, 0.2, 6.59, 3.08], walk: { p: [5.85, 0.8], look: [5.9, 1.3, 4.5] } },
-    { id: 'bed1', name: 'საძინებელი 1', r: [6.69, 0.2, 9.8, 3.03], walk: { p: [7.1, 0.75], look: [9.3, 0.9, 1.9] } },
-    { id: 'living', name: 'მისაღები · სამზარეულო', r: [5.075, 3.13, 9.8, 6.91], walk: { p: [6.1, 3.45], look: [9.2, 1.0, 6.0] } },
-    { id: 'bed2', name: 'საძინებელი 2', r: [6.66, 7.01, 9.8, 9.85], walk: { p: [7.0, 7.55], look: [8.6, 0.8, 9.4] } },
-    { id: 'bath', name: 'სააბაზანო', r: [5.075, 7.01, 6.56, 9.85], walk: { p: [5.65, 8.45], look: [6.3, 1.1, 7.4] } },
-  ],
-  entryPt: [5.85, 0.8],
-  cove: [[5.8, 3.2, 9.73, 3.2], [9.73, 3.2, 9.73, 6.84], [6.6, 6.84, 9.73, 6.84]],
-  beds: [
-    { r: [7.7, 0.68, 9.8, 2.28], head: 'E', room: 'bed1', ns: [[9.42, 0.22, 9.8, 0.62], [9.42, 2.34, 9.8, 2.74]], read: 'globe' },
-    { r: [7.65, 7.75, 9.25, 9.85], head: 'S', room: 'bed2', ns: [[7.28, 9.45, 7.6, 9.85], [9.3, 9.45, 9.7, 9.85]], read: 'sconce' },
-  ],
-  wardrobes: [{ r: [6.69, 1.3, 7.29, 3.03], face: 'E' }, { r: [6.66, 8.0, 7.26, 9.85], face: 'E' }],
-  storage: { r: [5.075, 1.1, 5.475, 2.7], face: 'E' },
-  sofa: [{ r: [7.4, 6.0, 9.6, 6.9], backs: ['S'], arms: ['W', 'E'] }, { r: [8.7, 5.25, 9.6, 6.0], arms: ['E'] }],
-  tv: { face: 'S', wall: 3.13, a0: 8.15, a1: 9.35, panel: [7.95, 9.55] },
-  dining: { r: [6.15, 4.4, 7.55, 5.25], chairs: [[6.5, 4.27, 'S'], [7.2, 4.27, 'S'], [6.5, 5.38, 'N'], [7.2, 5.38, 'N']] },
-  kitchen: { r: [5.075, 4.2, 5.675, 6.25], face: 'E', fridge: [4.2, 4.8], hob: 5.15, sink: 5.85 },
-  bath: {
-    vanity: { r: [6.11, 7.2, 6.56, 7.8], face: 'W', mirror: [7.22, 7.78] }, washer: { r: [5.96, 8.0, 6.56, 8.6], face: 'W' },
-    toilet: { ledge: [5.075, 7.05, 5.255, 7.8], bowl: [5.255, 7.23, 5.73, 7.61] },
-    shower: { r: [5.075, 8.9, 6.56, 9.85], glass: [[5.7, 8.9], [6.56, 8.9]], head: [5.4, 9.4], niche: { ax: 'x', z: 9.845, a0: 5.25, a1: 5.95 } },
-  },
-  lamp: { base: [7.15, 6.7], shade: [8.15, 1.7, 6.2] },
-  rugs: [[7.6, 4.0, 9.5, 5.95], [7.4, 0.45, 9.6, 2.5], [7.2, 7.45, 9.6, 9.45]],
-  plants: [[7.85, 3.45]],
-  switches: [
-    { id: 'ჩ1', room: 'შესასვლელი', p: [6.33, 0.2], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, ჩარჩოდან ≈18 სმ-ში. ქვედა ღილაკი ყველა სანათს თიშავს.' },
-    { id: 'ჩ2', room: 'მისაღები', p: [6.8, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'დერეფნიდან მისაღებში შესვლისას, მარჯვნივ.' },
-    { id: 'ჩ3', room: 'საძინებელი 1', p: [6.69, 1.23], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-    { id: 'ჩ4', room: 'საძინებელი 1', p: [9.8, 0.42], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
-    { id: 'ჩ5', room: 'საძინებელი 1', p: [9.8, 2.54], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
-    { id: 'ჩ6', room: 'საძინებელი 2', p: [6.66, 7.2], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-    { id: 'ჩ7', room: 'საძინებელი 2', p: [7.44, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-    { id: 'ჩ8', room: 'საძინებელი 2', p: [9.5, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
-    { id: 'ჩ9', room: 'სააბაზანო', p: [6.61, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში.' },
-    { id: 'ჩ10', room: 'სამზარეულო', p: [5.075, 4.88], n: 'E', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
-  ],
-  sockets: [
-    { p: [8.75, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
-    { p: [9.8, 5.1], n: 'W', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
-    { p: [6.85, 4.82], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
-    { p: [5.075, 5.5], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
-    { p: [5.075, 6.15], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
-    { p: [5.075, 4.5], n: 'E', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
-    { p: [5.075, 0.7], n: 'E', h: 0.3, kind: 'რობოტ-მტვერსასრუტის ბაზა', room: 'შესასვლელი' },
-    { p: [9.8, 0.42], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-    { p: [9.8, 2.54], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-    { p: [7.44, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-    { p: [9.5, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-    { p: [6.56, 7.95], n: 'W', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
-    { p: [6.56, 8.45], n: 'W', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
-  ],
-};
-function PUA(f) {
-  return {
+function defineProject() {
+  function floor1() {
+    const walls = [
+      { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: [[0.45, 4.6, 'win', 0.8, 2.55]] },
+      { g: '2', h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F1', pos: '2:wall', ext: [0, -1], open: [[5.2, 6.15, 'entry'], [6.25, 6.5, 'win', 0.0, 2.2], [6.95, 9.45, 'win', 0.6, 2.55]] },
+      { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [[0.45, 2.35, 'win', 0.0, 2.55], [3.25, 4.15, 'entry'], [4.4, 6.75, 'win', 0.0, 2.55], [7.3, 9.4, 'win', 0.45, 2.55]] },
+      { g: '2', h: 0, c: 9.9, from: 0, to: 3.08, t: 0.2, neg: '2:accent', pos: 'F1', ext: [1, 0] },
+      { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [[3.69, 6.15, 'win'], [7.2, 9.6, 'win']] },
+      { g: '1', h: 1, c: 9.95, from: 0, to: 3.3, t: 0.2, neg: '1:accent', pos: 'F1', ext: [0, 1] },
+      { g: '1', h: 1, c: 9.95, from: 3.3, to: 5.0, t: 0.2, neg: '1:bathWall', pos: 'F1', ext: [0, 1] },
+      { g: '2', h: 1, c: 9.95, from: 5.0, to: 6.61, t: 0.2, neg: '2:bathWall', pos: 'F1', ext: [0, 1] },
+      { g: '2', h: 1, c: 9.95, from: 6.61, to: 10.0, t: 0.2, neg: '2:accent', pos: 'F1', ext: [0, 1] },
+      { g: 'S1', h: 0, c: 5.0, from: 0.2, to: 3.08, t: 0.15, neg: '1:accent', pos: '2:wall', party: 1 },
+      { g: 'S1', h: 0, c: 5.0, from: 3.08, to: 4.2, t: 0.15, neg: '1:wall', pos: '2:wall', party: 1 },
+      { g: 'S1', h: 0, c: 5.0, from: 4.2, to: 6.3, t: 0.15, neg: '1:backsplash', pos: '2:backsplash', party: 1 },
+      { g: 'S1', h: 0, c: 5.0, from: 6.3, to: 6.96, t: 0.15, neg: '1:wall', pos: '2:wall', party: 1 },
+      { g: 'S1', h: 0, c: 5.0, from: 6.96, to: 9.85, t: 0.15, neg: '1:bathWall', pos: '2:bathWall', party: 1 },
+      { g: '1', h: 1, c: 3.08, from: 0.2, to: 4.925, t: 0.1, neg: '1:wall', pos: '1:wall', open: [[3.4, 4.2, 'door']] },
+      { g: '1', h: 1, c: 6.96, from: 0.2, to: 3.3, t: 0.1, neg: '1:wall', pos: '1:wall', open: [[2.45, 3.25, 'door']] },
+      { g: '1', h: 1, c: 6.96, from: 3.3, to: 4.925, t: 0.1, neg: '1:wall', pos: '1:bathWall', open: [[3.42, 4.18, 'door']] },
+      { g: '1', h: 0, c: 3.3, from: 7.01, to: 9.85, t: 0.1, neg: '1:wall', pos: '1:bathWall' },
+      { g: '2', h: 0, c: 6.64, from: 0.2, to: 3.08, t: 0.1, neg: '2:wall', pos: '2:wall', open: [[0.3, 1.05, 'door']] },
+      { g: '2', h: 1, c: 3.08, from: 6.59, to: 9.8, t: 0.1, neg: '2:wall', pos: '2:wall' },
+      { g: '2', h: 1, c: 6.96, from: 5.075, to: 6.61, t: 0.1, neg: '2:wall', pos: '2:bathWall', open: [[5.72, 6.52, 'door']] },
+      { g: '2', h: 1, c: 6.96, from: 6.61, to: 9.8, t: 0.1, neg: '2:wall', pos: '2:wall', open: [[6.7, 7.5, 'door']] },
+      { g: '2', h: 0, c: 6.61, from: 7.01, to: 9.85, t: 0.1, neg: '2:bathWall', pos: '2:wall' },
+    ];
+    const doors = [
+      { g: '1', hinge: [0.1, 4.15], dir: [0, -1], n: [-1, 0], w: 0.85, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 },
+      { g: '1', hinge: [4.2, 3.08], dir: [-1, 0], n: [0, -1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
+      { g: '1', hinge: [3.25, 6.96], dir: [-1, 0], n: [0, 1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
+      { g: '1', hinge: [4.18, 6.96], dir: [-1, 0], n: [0, -1], w: 0.76, ang: 70, t: 0.1, h: DOOR_H },
+      { g: '2', hinge: [5.2, 0.1], dir: [1, 0], n: [0, -1], w: 0.95, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 },
+      { g: '2', hinge: [6.64, 0.3], dir: [0, 1], n: [1, 0], w: 0.75, ang: 75, t: 0.1, h: DOOR_H },
+      { g: '2', hinge: [5.72, 6.96], dir: [1, 0], n: [0, -1], w: 0.8, ang: 70, t: 0.1, h: DOOR_H },
+      { g: '2', hinge: [7.5, 6.96], dir: [-1, 0], n: [0, 1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
+    ];
+    return { walls, doors };
+  }
+  function floorUp(f) {
+    const A = f === 2 ? '3' : '5', B = f === 2 ? '4' : '6', S = 'S' + f;
+    const walls = [
+      { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [[0.35, 2.25, 'win', 1.15, 2.6, 'frame'], [2.65, 4.75, 'win', 1.15, 2.6, 'frame']] },
+      { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [[5.25, 7.35, 'win', 1.15, 2.6, 'frame'], [7.75, 9.65, 'win', 1.15, 2.6, 'frame']] },
+      { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: [[0.9, 3.6, 'win', 0.0, 2.6, 'rail frame'], [4.2, 9.65, 'win', 0.0, 2.6, 'rail frame']] },
+      { g: B, h: 0, c: 9.9, from: 0, to: 10.05, t: 0.2, neg: B + ':wall', pos: 'F', ext: [1, 0] },
+      { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[0.3, 2.45, 'win', 0.0, 2.6, 'frame'], [2.65, 3.55, 'entry']] : [[0.3, 3.9, 'win', 0.0, 2.6, 'rail frame']] },
+      { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry'], [5.15, 5.75, 'win', 0.0, 2.2]] : [[4.3, 5.7, 'win', 0.0, 2.6, 'rail']] },
+      { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], [7.55, 9.7, 'win', 0.0, 2.6, 'frame']] : [[6.1, 9.7, 'win', 0.0, 2.6, 'rail frame']] },
+      { g: S, h: 0, c: 5.0, from: 0.2, to: 3.93, t: 0.15, neg: A + ':wall', pos: B + ':wall', party: 1 },
+      { g: S, h: 0, c: 5.0, from: 3.93, to: 6.9, t: 0.15, neg: A + ':bathWall', pos: B + ':bathWall', party: 1 },
+      { g: S, h: 0, c: 4.1, from: 6.85, to: 8.85, t: 0.1, neg: A + ':backsplash', pos: 'H' },
+      { g: S, h: 0, c: 4.1, from: 8.85, to: 9.85, t: 0.1, neg: A + ':wall', pos: 'H', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
+      { g: S, h: 0, c: 5.9, from: 6.85, to: 8.85, t: 0.1, neg: 'H', pos: B + ':backsplash' },
+      { g: S, h: 0, c: 5.9, from: 8.85, to: 9.85, t: 0.1, neg: 'H', pos: B + ':wall', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
+    ];
+    const inner = [
+      { g: A, h: 0, c: 2.45, from: 0.2, to: 3.93, t: 0.1, neg: A + ':wall', pos: A + ':wall' },
+      { g: A, h: 1, c: 3.93, from: 0.2, to: 3.4, t: 0.1, neg: A + ':wall', pos: A + ':wall', open: [[1.0, 1.8, 'door'], [2.55, 3.3, 'door']] },
+      { g: A, h: 1, c: 3.93, from: 3.4, to: 4.925, t: 0.1, neg: A + ':wall', pos: A + ':bathWall' },
+      { g: A, h: 0, c: 3.4, from: 3.98, to: 6.9, t: 0.1, neg: A + ':wall', pos: A + ':bathWall', open: [[6.05, 6.8, 'door']] },
+      { g: A, h: 1, c: 6.9, from: 3.35, to: 4.05, t: 0.1, neg: A + ':bathWall', pos: A + ':wall' },
+      { g: A, h: 1, c: 6.9, from: 4.05, to: 4.925, t: 0.1, neg: A + ':bathWall', pos: 'H' },
+    ];
+    for (const w of inner) { walls.push(w); walls.push(mirrorWall(w, A, B)); }
+    const dA = [
+      { g: A, hinge: [1.8, 3.93], dir: [-1, 0], n: [0, -1], w: 0.8, ang: 75, t: 0.1, h: DOOR_H },
+      { g: A, hinge: [2.55, 3.93], dir: [1, 0], n: [0, -1], w: 0.75, ang: 80, t: 0.1, h: DOOR_H },
+      { g: A, hinge: [3.4, 6.8], dir: [0, -1], n: [1, 0], w: 0.75, ang: 70, t: 0.1, h: DOOR_H },
+      f === 2 ? { g: A, hinge: [3.55, 9.95], dir: [-1, 0], n: [0, 1], w: 0.9, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 }
+        : { g: A, hinge: [4.1, 8.95], dir: [0, 1], n: [-1, 0], w: 0.85, ang: 70, t: 0.1, h: DOOR_H, entry: 1 },
+    ];
+    const doors = [];
+    for (const d of dA) { doors.push(d); doors.push(mirrorDoor(d, B)); }
+    if (f === 2) doors.push({ g: S, hinge: [4.25, 9.95], dir: [1, 0], n: [0, 1], w: 0.8, ang: 0, t: 0.2, h: ENTRY_H, entry: 1 });
+    return { walls, doors };
+  }
+
+
+  const P1A = {
     rooms: [
-      { id: 'living', name: 'მისაღები · სამზარეულო', r: [0.2, 3.98, 4.05, 9.85], sub: [3.35, 3.98, 4.05, 6.9], walk: { p: [2.6, 9.2], look: [1.0, 1.05, 4.6] } },
-      { id: 'bed1', name: 'საძინებელი 1', r: [0.2, 0.2, 2.4, 3.88], walk: { p: [1.4, 3.45], look: [1.3, 0.9, 0.6] } },
-      { id: 'bed2', name: 'საძინებელი 2', r: [2.5, 0.2, 4.925, 3.88], walk: { p: [3.0, 3.45], look: [3.7, 0.9, 0.6] } },
-      { id: 'bath', name: 'სააბაზანო', r: [3.45, 3.98, 4.925, 6.85], walk: { p: [3.75, 6.3], look: [4.5, 1.1, 4.4] } },
+      { id: 'living', name: 'მისაღები · სამზარეულო', r: [0.2, 3.13, 4.925, 6.91], walk: { p: [3.6, 6.45], look: [0.8, 1.1, 4.0] } },
+      { id: 'bed1', name: 'საძინებელი 1', r: [0.2, 0.2, 4.925, 3.03], walk: { p: [3.75, 2.7], look: [1.0, 1.0, 0.7] } },
+      { id: 'bed2', name: 'საძინებელი 2', r: [0.2, 7.01, 3.25, 9.85], walk: { p: [2.85, 7.4], look: [1.1, 0.8, 9.4] } },
+      { id: 'bath', name: 'სააბაზანო', r: [3.35, 7.01, 4.925, 9.85], walk: { p: [4.35, 8.45], look: [3.6, 1.1, 7.4] } },
     ],
-    entryPt: f === 2 ? [3.1, 9.3] : [3.6, 9.35],
-    cove: [[0.27, 4.05, 0.27, 9.78], [0.27, 4.05, 3.28, 4.05], [3.28, 4.05, 3.28, 6.97], [3.28, 6.97, 3.98, 6.97], [0.27, 9.78, 3.98, 9.78]],
+    entryPt: [0.9, 3.7],
+    cove: [[0.27, 3.2, 0.27, 6.84], [0.27, 3.2, 4.86, 3.2], [0.27, 6.84, 4.2, 6.84]],
     beds: [
-      { r: [0.6, 0.2, 2.0, 2.3], head: 'N', room: 'bed1', ns: [[0.22, 0.2, 0.55, 0.5], [2.05, 0.2, 2.38, 0.5]], read: 'globe' },
-      { r: [2.91, 0.2, 4.51, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.86, 0.5], [4.56, 0.2, 4.9, 0.5]], read: 'sconce' },
+      { r: [2.775, 0.55, 4.875, 2.15], head: 'E', room: 'bed1', ns: [[4.5, 0.2, 4.9, 0.5], [4.5, 2.2, 4.9, 2.5]], read: 'globe' },
+      { r: [0.6, 7.75, 2.2, 9.85], head: 'S', room: 'bed2', ns: [[0.22, 9.45, 0.56, 9.85], [2.24, 9.45, 2.6, 9.85]], read: 'sconce' },
     ],
-    wardrobes: [{ r: [1.85, 2.55, 2.4, 3.88], face: 'W' }, { r: [4.325, 2.55, 4.925, 3.88], face: 'W' }],
-    sofa: [{ r: [0.2, 4.3, 1.1, 5.85], backs: ['W'], arms: ['N'] }, { r: [0.2, 5.85, 1.75, 6.75], backs: ['W'], arms: ['S'] }],
-    tv: { face: 'W', wall: 3.35, a0: 4.6, a1: 5.7, panel: [4.3, 5.95] },
-    dining: { r: [0.55, 8.35, 1.95, 9.2], chairs: [[0.9, 8.22, 'S'], [1.6, 8.22, 'S'], [0.9, 9.33, 'N'], [1.6, 9.33, 'N']] },
-    kitchen: { r: [3.45, 7.0, 4.05, 8.8], face: 'W', fridge: [8.2, 8.8], hob: 7.3, sink: 7.92 },
+    wardrobes: [{ r: [0.2, 2.43, 3.2, 3.03], face: 'N' }, { r: [2.65, 8.0, 3.25, 9.85], face: 'W' }],
+    desk: { r: [0.9, 0.2, 2.3, 0.75], face: 'S', chair: [1.6, 1.05, 'N'] },
+    sofa: [{ r: [0.2, 5.25, 1.1, 6.0], arms: ['W'] }, { r: [0.2, 6.0, 2.4, 6.9], backs: ['S'], arms: ['W', 'E'] }],
+    tv: { face: 'S', wall: 3.13, a0: 0.6, a1: 1.8, panel: [0.5, 2.0] },
+    dining: { r: [2.55, 4.35, 3.95, 5.2], chairs: [[2.9, 4.22, 'S'], [3.6, 4.22, 'S'], [2.9, 5.33, 'N'], [3.6, 5.33, 'N']] },
+    kitchen: { r: [4.325, 4.2, 4.925, 6.25], face: 'W', fridge: [4.2, 4.8], hob: 5.15, sink: 5.85 },
     bath: {
-      vanity: { r: [3.45, 4.7, 3.9, 5.3], face: 'E', mirror: [4.72, 5.28] }, washer: { r: [3.45, 3.98, 4.05, 4.55], face: 'E' },
-      toilet: { ledge: [4.745, 6.0, 4.925, 6.75], bowl: [4.27, 6.18, 4.745, 6.56] },
-      shower: { r: [4.05, 3.98, 4.925, 5.25], glass: [[4.05, 3.98], [4.05, 4.9]], head: [4.5, 4.6], niche: { ax: 'x', z: 3.985, a0: 4.2, a1: 4.8 } },
+      vanity: { r: [3.35, 7.2, 3.8, 7.8], face: 'E', mirror: [7.22, 7.78] }, washer: { r: [3.35, 8.0, 3.95, 8.6], face: 'E' },
+      toilet: { ledge: [4.745, 7.05, 4.925, 7.8], bowl: [4.27, 7.23, 4.745, 7.61] },
+      shower: { r: [3.35, 8.9, 4.925, 9.85], glass: [[3.35, 8.9], [4.3, 8.9]], head: [4.1, 9.4], niche: { ax: 'x', z: 9.845, a0: 3.5, a1: 4.2 } },
     },
-    lamp: { base: [2.0, 6.95], shade: [1.1, 1.7, 5.95] },
-    rugs: [[1.25, 4.4, 2.95, 6.6], [0.45, 1.2, 1.8, 2.8], [2.7, 1.2, 4.25, 2.8]],
-    plants: [[0.4, 7.15]],
+    lamp: { base: [2.65, 6.7], shade: [1.6, 1.7, 6.2] },
+    rugs: [[0.7, 3.9, 2.45, 5.9], [2.4, 0.35, 4.6, 2.35], [0.4, 7.4, 2.4, 9.4]],
+    plants: [[2.3, 3.45]],
     switches: [
-      { id: 'ჩ1', room: 'შესასვლელი', p: f === 2 ? [2.47, 9.85] : [3.87, 9.85], n: 'N', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: f === 2 ? 'შესასვლელი კარის სახელურის მხარეს. ქვედა ღილაკი გასვლისას ყველა სანათს თიშავს.' : 'კიბის უჯრედიდან შემოსასვლელი კარის სახელურის მხარეს, მის გვერდით კედელზე.' },
-      { id: 'ჩ2', room: 'მისაღები', p: [3.35, 4.12], n: 'W', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებლების კარებთან, სააბაზანოს კედელზე — დასაძინებლად წასვლისას მისაღებს აქედან ჩააქრობთ.' },
-      { id: 'ჩ3', room: 'საძინებელი 1', p: [0.82, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-      { id: 'ჩ4', room: 'საძინებელი 1', p: [0.385, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
-      { id: 'ჩ5', room: 'საძინებელი 1', p: [2.215, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
-      { id: 'ჩ6', room: 'საძინებელი 2', p: [3.48, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-      { id: 'ჩ7', room: 'საძინებელი 2', p: [2.69, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-      { id: 'ჩ8', room: 'საძინებელი 2', p: [4.73, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
-      { id: 'ჩ9', room: 'სააბაზანო', p: [3.45, 5.87], n: 'E', h: 1.05, kind: '2-კლავიშიანი, IP44', ctl: ['bath', 'mirror'], note: 'შიგნით, კარის სახელურის მხარეს, საშხაპიდან 0,6 მ-ზე შორს — 1-ლი და მე-2 ზონის გარეთ.' },
-      { id: 'ჩ10', room: 'სამზარეულო', p: [4.05, 8.12], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
+      { id: 'ჩ1', room: 'შესასვლელი', p: [0.38, 3.13], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, გვერდით კედელზე. ქვედა ღილაკი გასვლისას ბინაში ყველა სანათს თიშავს.' },
+      { id: 'ჩ2', room: 'მისაღები', p: [3.22, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებელი 1-ის კართან, მისაღების მხარეს. შესასვლელის პანელთან ერთად ორი ადგილიდან იმართება.' },
+      { id: 'ჩ3', room: 'საძინებელი 1', p: [3.22, 3.03], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს — ხელი მიგიწვდებათ, სანამ კარი ბოლომდე გაიღება.' },
+      { id: 'ჩ4', room: 'საძინებელი 1', p: [4.925, 0.36], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ — ჭერის შუქს ადგომის გარეშე ჩააქრობთ.' },
+      { id: 'ჩ5', room: 'საძინებელი 1', p: [4.925, 2.34], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'საწოლის მეორე მხარეს; მესამე ღილაკი ღამის ბილიკს რთავს.' },
+      { id: 'ჩ6', room: 'საძინებელი 2', p: [2.27, 7.01], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
+      { id: 'ჩ7', room: 'საძინებელი 2', p: [0.39, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ8', room: 'საძინებელი 2', p: [2.42, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ9', room: 'სააბაზანო', p: [3.335, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში. გამწოვი ტენიანობის სენსორით მუშაობს.' },
+      { id: 'ჩ10', room: 'სამზარეულო', p: [4.925, 4.88], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'კედელში ყუთი არ სჭირდება — შეეხეთ თაროს პროფილის ბოლოს.' },
     ],
     sockets: [
-      { p: [3.35, 5.15], n: 'W', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
-      { p: [0.2, 7.0], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
-      { p: [0.2, 8.0], n: 'E', h: 0.3, kind: 'ორმაგი სასადილო მაგიდასთან', room: 'მისაღები' },
-      { p: [4.05, 7.63], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
-      { p: [4.05, 8.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
-      { p: [0.385, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-      { p: [2.215, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-      { p: [2.69, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-      { p: [4.73, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-      { p: [3.45, 5.45], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
-      { p: [3.75, 3.98], n: 'S', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
+      { p: [1.2, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
+      { p: [0.2, 5.1], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
+      { p: [3.25, 4.78], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
+      { p: [4.925, 5.5], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
+      { p: [4.925, 6.15], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
+      { p: [4.925, 4.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
+      { p: [4.925, 0.36], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [4.925, 2.34], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [2.5, 0.2], n: 'S', h: 0.3, kind: 'სამუშაო მაგიდასთან ორმაგი + ინტერნეტი', room: 'საძინებელი 1' },
+      { p: [0.39, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [2.42, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [3.35, 7.95], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
+      { p: [3.35, 8.45], n: 'E', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
     ],
   };
+  const P1B = {
+    rooms: [
+      { id: 'hall', name: 'შესასვლელი', r: [5.075, 0.2, 6.59, 3.08], walk: { p: [5.85, 0.8], look: [5.9, 1.3, 4.5] } },
+      { id: 'bed1', name: 'საძინებელი 1', r: [6.69, 0.2, 9.8, 3.03], walk: { p: [7.1, 0.75], look: [9.3, 0.9, 1.9] } },
+      { id: 'living', name: 'მისაღები · სამზარეულო', r: [5.075, 3.13, 9.8, 6.91], walk: { p: [6.1, 3.45], look: [9.2, 1.0, 6.0] } },
+      { id: 'bed2', name: 'საძინებელი 2', r: [6.66, 7.01, 9.8, 9.85], walk: { p: [7.0, 7.55], look: [8.6, 0.8, 9.4] } },
+      { id: 'bath', name: 'სააბაზანო', r: [5.075, 7.01, 6.56, 9.85], walk: { p: [5.65, 8.45], look: [6.3, 1.1, 7.4] } },
+    ],
+    entryPt: [5.85, 0.8],
+    cove: [[5.8, 3.2, 9.73, 3.2], [9.73, 3.2, 9.73, 6.84], [6.6, 6.84, 9.73, 6.84]],
+    beds: [
+      { r: [7.7, 0.68, 9.8, 2.28], head: 'E', room: 'bed1', ns: [[9.42, 0.22, 9.8, 0.62], [9.42, 2.34, 9.8, 2.74]], read: 'globe' },
+      { r: [7.65, 7.75, 9.25, 9.85], head: 'S', room: 'bed2', ns: [[7.28, 9.45, 7.6, 9.85], [9.3, 9.45, 9.7, 9.85]], read: 'sconce' },
+    ],
+    wardrobes: [{ r: [6.69, 1.3, 7.29, 3.03], face: 'E' }, { r: [6.66, 8.0, 7.26, 9.85], face: 'E' }],
+    storage: { r: [5.075, 1.1, 5.475, 2.7], face: 'E' },
+    sofa: [{ r: [7.4, 6.0, 9.6, 6.9], backs: ['S'], arms: ['W', 'E'] }, { r: [8.7, 5.25, 9.6, 6.0], arms: ['E'] }],
+    tv: { face: 'S', wall: 3.13, a0: 8.15, a1: 9.35, panel: [7.95, 9.55] },
+    dining: { r: [6.15, 4.4, 7.55, 5.25], chairs: [[6.5, 4.27, 'S'], [7.2, 4.27, 'S'], [6.5, 5.38, 'N'], [7.2, 5.38, 'N']] },
+    kitchen: { r: [5.075, 4.2, 5.675, 6.25], face: 'E', fridge: [4.2, 4.8], hob: 5.15, sink: 5.85 },
+    bath: {
+      vanity: { r: [6.11, 7.2, 6.56, 7.8], face: 'W', mirror: [7.22, 7.78] }, washer: { r: [5.96, 8.0, 6.56, 8.6], face: 'W' },
+      toilet: { ledge: [5.075, 7.05, 5.255, 7.8], bowl: [5.255, 7.23, 5.73, 7.61] },
+      shower: { r: [5.075, 8.9, 6.56, 9.85], glass: [[5.7, 8.9], [6.56, 8.9]], head: [5.4, 9.4], niche: { ax: 'x', z: 9.845, a0: 5.25, a1: 5.95 } },
+    },
+    lamp: { base: [7.15, 6.7], shade: [8.15, 1.7, 6.2] },
+    rugs: [[7.6, 4.0, 9.5, 5.95], [7.4, 0.45, 9.6, 2.5], [7.2, 7.45, 9.6, 9.45]],
+    plants: [[7.85, 3.45]],
+    switches: [
+      { id: 'ჩ1', room: 'შესასვლელი', p: [6.33, 0.2], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, ჩარჩოდან ≈18 სმ-ში. ქვედა ღილაკი ყველა სანათს თიშავს.' },
+      { id: 'ჩ2', room: 'მისაღები', p: [6.8, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'დერეფნიდან მისაღებში შესვლისას, მარჯვნივ.' },
+      { id: 'ჩ3', room: 'საძინებელი 1', p: [6.69, 1.23], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
+      { id: 'ჩ4', room: 'საძინებელი 1', p: [9.8, 0.42], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
+      { id: 'ჩ5', room: 'საძინებელი 1', p: [9.8, 2.54], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
+      { id: 'ჩ6', room: 'საძინებელი 2', p: [6.66, 7.2], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
+      { id: 'ჩ7', room: 'საძინებელი 2', p: [7.44, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ8', room: 'საძინებელი 2', p: [9.5, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ9', room: 'სააბაზანო', p: [6.61, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში.' },
+      { id: 'ჩ10', room: 'სამზარეულო', p: [5.075, 4.88], n: 'E', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
+    ],
+    sockets: [
+      { p: [8.75, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
+      { p: [9.8, 5.1], n: 'W', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
+      { p: [6.85, 4.82], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
+      { p: [5.075, 5.5], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
+      { p: [5.075, 6.15], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
+      { p: [5.075, 4.5], n: 'E', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
+      { p: [5.075, 0.7], n: 'E', h: 0.3, kind: 'რობოტ-მტვერსასრუტის ბაზა', room: 'შესასვლელი' },
+      { p: [9.8, 0.42], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [9.8, 2.54], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [7.44, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [9.5, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [6.56, 7.95], n: 'W', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
+      { p: [6.56, 8.45], n: 'W', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
+    ],
+  };
+  function PUA(f) {
+    return {
+      rooms: [
+        { id: 'living', name: 'მისაღები · სამზარეულო', r: [0.2, 3.98, 4.05, 9.85], sub: [3.35, 3.98, 4.05, 6.9], walk: { p: [2.6, 9.2], look: [1.0, 1.05, 4.6] } },
+        { id: 'bed1', name: 'საძინებელი 1', r: [0.2, 0.2, 2.4, 3.88], walk: { p: [1.4, 3.45], look: [1.3, 0.9, 0.6] } },
+        { id: 'bed2', name: 'საძინებელი 2', r: [2.5, 0.2, 4.925, 3.88], walk: { p: [3.0, 3.45], look: [3.7, 0.9, 0.6] } },
+        { id: 'bath', name: 'სააბაზანო', r: [3.45, 3.98, 4.925, 6.85], walk: { p: [3.75, 6.3], look: [4.5, 1.1, 4.4] } },
+      ],
+      entryPt: f === 2 ? [3.1, 9.3] : [3.6, 9.35],
+      cove: [[0.27, 4.05, 0.27, 9.78], [0.27, 4.05, 3.28, 4.05], [3.28, 4.05, 3.28, 6.97], [3.28, 6.97, 3.98, 6.97], [0.27, 9.78, 3.98, 9.78]],
+      beds: [
+        { r: [0.6, 0.2, 2.0, 2.3], head: 'N', room: 'bed1', ns: [[0.22, 0.2, 0.55, 0.5], [2.05, 0.2, 2.38, 0.5]], read: 'globe' },
+        { r: [2.91, 0.2, 4.51, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.86, 0.5], [4.56, 0.2, 4.9, 0.5]], read: 'sconce' },
+      ],
+      wardrobes: [{ r: [1.85, 2.55, 2.4, 3.88], face: 'W' }, { r: [4.325, 2.55, 4.925, 3.88], face: 'W' }],
+      sofa: [{ r: [0.2, 4.3, 1.1, 5.85], backs: ['W'], arms: ['N'] }, { r: [0.2, 5.85, 1.75, 6.75], backs: ['W'], arms: ['S'] }],
+      tv: { face: 'W', wall: 3.35, a0: 4.6, a1: 5.7, panel: [4.3, 5.95] },
+      dining: { r: [0.55, 8.35, 1.95, 9.2], chairs: [[0.9, 8.22, 'S'], [1.6, 8.22, 'S'], [0.9, 9.33, 'N'], [1.6, 9.33, 'N']] },
+      kitchen: { r: [3.45, 7.0, 4.05, 8.8], face: 'W', fridge: [8.2, 8.8], hob: 7.3, sink: 7.92 },
+      bath: {
+        vanity: { r: [3.45, 4.7, 3.9, 5.3], face: 'E', mirror: [4.72, 5.28] }, washer: { r: [3.45, 3.98, 4.05, 4.55], face: 'E' },
+        toilet: { ledge: [4.745, 6.0, 4.925, 6.75], bowl: [4.27, 6.18, 4.745, 6.56] },
+        shower: { r: [4.05, 3.98, 4.925, 5.25], glass: [[4.05, 3.98], [4.05, 4.9]], head: [4.5, 4.6], niche: { ax: 'x', z: 3.985, a0: 4.2, a1: 4.8 } },
+      },
+      lamp: { base: [2.0, 6.95], shade: [1.1, 1.7, 5.95] },
+      rugs: [[1.25, 4.4, 2.95, 6.6], [0.45, 1.2, 1.8, 2.8], [2.7, 1.2, 4.25, 2.8]],
+      plants: [[0.4, 7.15]],
+      switches: [
+        { id: 'ჩ1', room: 'შესასვლელი', p: f === 2 ? [2.47, 9.85] : [3.87, 9.85], n: 'N', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: f === 2 ? 'შესასვლელი კარის სახელურის მხარეს. ქვედა ღილაკი გასვლისას ყველა სანათს თიშავს.' : 'კიბის უჯრედიდან შემოსასვლელი კარის სახელურის მხარეს, მის გვერდით კედელზე.' },
+        { id: 'ჩ2', room: 'მისაღები', p: [3.35, 4.12], n: 'W', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებლების კარებთან, სააბაზანოს კედელზე — დასაძინებლად წასვლისას მისაღებს აქედან ჩააქრობთ.' },
+        { id: 'ჩ3', room: 'საძინებელი 1', p: [0.82, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
+        { id: 'ჩ4', room: 'საძინებელი 1', p: [0.385, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
+        { id: 'ჩ5', room: 'საძინებელი 1', p: [2.215, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
+        { id: 'ჩ6', room: 'საძინებელი 2', p: [3.48, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
+        { id: 'ჩ7', room: 'საძინებელი 2', p: [2.69, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
+        { id: 'ჩ8', room: 'საძინებელი 2', p: [4.73, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+        { id: 'ჩ9', room: 'სააბაზანო', p: [3.45, 5.87], n: 'E', h: 1.05, kind: '2-კლავიშიანი, IP44', ctl: ['bath', 'mirror'], note: 'შიგნით, კარის სახელურის მხარეს, საშხაპიდან 0,6 მ-ზე შორს — 1-ლი და მე-2 ზონის გარეთ.' },
+        { id: 'ჩ10', room: 'სამზარეულო', p: [4.05, 8.12], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
+      ],
+      sockets: [
+        { p: [3.35, 5.15], n: 'W', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
+        { p: [0.2, 7.0], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
+        { p: [0.2, 8.0], n: 'E', h: 0.3, kind: 'ორმაგი სასადილო მაგიდასთან', room: 'მისაღები' },
+        { p: [4.05, 7.63], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
+        { p: [4.05, 8.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
+        { p: [0.385, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+        { p: [2.215, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+        { p: [2.69, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+        { p: [4.73, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+        { p: [3.45, 5.45], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
+        { p: [3.75, 3.98], n: 'S', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
+      ],
+    };
+  }
+
+  const apartments = {
+    1: { floor: 1, side: 'A', P: P1A, style: 'warm', entry: 'დასავლეთის ეზოდან' },
+    2: { floor: 1, side: 'B', P: P1B, style: 'sage', entry: 'ჩრდილოეთის ეზოდან' },
+    3: { floor: 2, side: 'A', P: PUA(2), style: 'kartuli', entry: 'სამხრეთიდან, ქუჩის დონეზე' },
+    4: { floor: 2, side: 'B', P: mirrorP(PUA(2)), style: 'noir', entry: 'სამხრეთიდან, ქუჩის დონეზე' },
+    5: { floor: 3, side: 'A', P: PUA(3), style: 'beton', entry: 'კიბის უჯრედიდან' },
+    6: { floor: 3, side: 'B', P: mirrorP(PUA(3)), style: 'warm', entry: 'კიბის უჯრედიდან' },
+  };
+
+  const sideOf = id => apartments[id].side;
+  return {
+    key: 'dolabauri', name: 'დოლაბაური', eyebrow: 'საცხოვრებელი სახლი · 3 სართული · 6 ბინა',
+    floorH: 3.0, H: 2.8, sill: 0.9, head: 2.2, floors: [1, 2, 3], footprint: { x0: 0, z0: 0, x1: 10, z1: 10.05 }, cornice: true,
+    floorData: { 1: floor1(), 2: floorUp(2), 3: floorUp(3) }, apartments, defaultFocus: '3', stageFurniture: true,
+    slabs: f => f === 3 ? [[0, 0, 10, 6.95], [0, 6.95, 4.15, 10.05], [5.85, 6.95, 10, 10.05], [4.15, 8.89, 5.85, 10.05]] : [[0, 0, 10, 10.05]],
+    finishes: f => dolabFinishes(f), floorExtras: (f, F) => dolabFloorExtras(f, F), hallBelowVisible: (f, F) => f === 2 && F === 3,
+    extras() { dolabStair(); dolabRoof(); dolabSite(); }, mep: () => dolabMEP(), smartHide: [],
+    extLights: [
+  { c: 'ext', t: 'spot', p: [3.1, 5.4, 10.6], tg: [3.1, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
+  { c: 'ext', t: 'spot', p: [4.65, 5.4, 10.6], tg: [4.65, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
+  { c: 'ext', t: 'spot', p: [6.9, 5.4, 10.6], tg: [6.9, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
+  { c: 'ext', t: 'spot', p: [5.7, 2.5, -0.35], tg: [5.7, 0, -1.2], angle: 0.9, power: 8, dist: 5, shadow: 1 },
+  { c: 'ext', t: 'spot', p: [-0.35, 2.5, 3.7], tg: [-1.2, 0, 3.7], angle: 0.9, power: 8, dist: 5, shadow: 1 },
+  { c: 'ext', t: 'point', p: [1.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [8.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [-2.2, 0.7, 7.5], power: 1.2, dist: 3 },
+],
+    dims: () => [[[0, -0.6], [10, -0.6], '10,00 მ'], [[-0.7, 0], [-0.7, 10.05], '10,05 მ'], [[0, 10.65], [5.0, 10.65], '5,00 მ'], [[5.0, 10.65], [10, 10.65], '5,00 მ']],
+    view: { building: { target: [4.2, 3.8, 6.5], dir: [-0.72, 0.52, 1.0], dist: 31 }, aptCenter: id => [sideOf(id) === 'A' ? 2.5 : 7.5, 5.0], aptDir: id => [sideOf(id) === 'A' ? -0.62 : 0.62, 1.25, 0.9], aptDist: 15.5 },
+    pick: id => sideOf(id) === 'A' ? [-0.02, -0.05, 5.0, 10.1] : [5.0, -0.05, 10.02, 10.1],
+    tower: [['სართ. 3', ['5', '6']], ['სართ. 2', ['3', '4']], ['სართ. 1', ['1', '2']]],
+    facts: () => `<span class="fact"><b>${fmt(IDS.reduce((s, id) => s + APT[id].area, 0))}</b> მ² ბინები</span><span class="fact">6 × 2 საძინებელი</span><span class="fact">10,00 × 10,05 მ</span><span class="fact">მეზობელი 20 სმ-ში</span>`,
+    projectTab: () => dolabProjectTab(),
+  };
 }
-function mirrorP(P) {
-  const Q = JSON.parse(JSON.stringify(P));
-  const mR = r => [MX(r[2]), r[1], MX(r[0]), r[3]], m2 = p => [MX(p[0]), p[1]], m3 = p => [MX(p[0]), p[1], p[2]];
-  Q.rooms.forEach(r => { r.r = mR(r.r); if (r.sub) r.sub = mR(r.sub); r.walk.p = m2(r.walk.p); r.walk.look = m3(r.walk.look); });
-  Q.entryPt = m2(Q.entryPt);
-  Q.cove = Q.cove.map(s => [MX(s[0]), s[1], MX(s[2]), s[3]]);
-  Q.beds.forEach(b => { b.r = mR(b.r); b.head = mF(b.head); b.ns = b.ns.map(mR); });
-  Q.wardrobes.forEach(w => { w.r = mR(w.r); w.face = mF(w.face); });
-  Q.sofa.forEach(s => { s.r = mR(s.r); s.backs = (s.backs || []).map(mF); s.arms = (s.arms || []).map(mF); });
-  const t = Q.tv; t.face = mF(t.face); if (t.face === 'E' || t.face === 'W') t.wall = MX(t.wall); else { [t.a0, t.a1] = [MX(t.a1), MX(t.a0)]; t.panel = [MX(t.panel[1]), MX(t.panel[0])]; }
-  Q.dining.r = mR(Q.dining.r); Q.dining.chairs = Q.dining.chairs.map(c => [MX(c[0]), c[1], mF(c[2])]);
-  Q.kitchen.r = mR(Q.kitchen.r); Q.kitchen.face = mF(Q.kitchen.face);
-  const B = Q.bath; B.vanity.r = mR(B.vanity.r); B.vanity.face = mF(B.vanity.face); B.washer.r = mR(B.washer.r); B.washer.face = mF(B.washer.face);
-  B.toilet.ledge = mR(B.toilet.ledge); B.toilet.bowl = mR(B.toilet.bowl);
-  B.shower.r = mR(B.shower.r); B.shower.glass = B.shower.glass.map(m2); B.shower.head = m2(B.shower.head);
-  const n = B.shower.niche; if (n.ax === 'x') [n.a0, n.a1] = [MX(n.a1), MX(n.a0)]; else n.x = MX(n.x);
-  Q.lamp.base = m2(Q.lamp.base); Q.lamp.shade = m3(Q.lamp.shade);
-  Q.rugs = Q.rugs.map(mR); Q.plants = Q.plants.map(m2);
-  Q.switches.forEach(s => { s.p = m2(s.p); s.n = mF(s.n); });
-  Q.sockets.forEach(s => { s.p = m2(s.p); s.n = mF(s.n); });
-  return Q;
+function dolabFinishes(f) {
+  const [A, B] = IDS.filter(id => APT[id].floor === f), out = [];
+  if (f === 1) out.push([MATS[A].floor, [0.2, 0.2, 4.925, 9.85]], [MATS[A].bathFloor, [3.35, 7.01, 4.925, 9.85], 0.004], [MATS[B].floor, [5.075, 0.2, 9.8, 9.85]], [MATS[B].bathFloor, [5.075, 7.01, 6.56, 9.85], 0.004]);
+  else {
+    out.push([MATS[A].floor, [0.2, 0.2, 4.925, 6.9]], [MATS[A].floor, [0.2, 6.9, 4.05, 9.85]], [MATS[A].bathFloor, [3.45, 3.98, 4.925, 6.85], 0.004]);
+    out.push([MATS[B].floor, [5.075, 0.2, 9.8, 6.9]], [MATS[B].floor, [5.95, 6.9, 9.8, 9.85]], [MATS[B].bathFloor, [5.075, 3.98, 6.55, 6.85], 0.004]);
+    out.push([SH.hallFloor, f === 2 ? [4.15, 6.95, 5.85, 9.85] : [4.15, 8.89, 5.85, 9.85], 0.003]);
+  }
+  return out;
 }
-const APT = {
-  1: { floor: 1, side: 'A', P: P1A, style: 'warm', entry: 'დასავლეთის ეზოდან' },
-  2: { floor: 1, side: 'B', P: P1B, style: 'sage', entry: 'ჩრდილოეთის ეზოდან' },
-  3: { floor: 2, side: 'A', P: PUA(2), style: 'kartuli', entry: 'სამხრეთიდან, ქუჩის დონეზე' },
-  4: { floor: 2, side: 'B', P: mirrorP(PUA(2)), style: 'noir', entry: 'სამხრეთიდან, ქუჩის დონეზე' },
-  5: { floor: 3, side: 'A', P: PUA(3), style: 'beton', entry: 'კიბის უჯრედიდან' },
-  6: { floor: 3, side: 'B', P: mirrorP(PUA(3)), style: 'warm', entry: 'კიბის უჯრედიდან' },
-};
-const IDS = ['1', '2', '3', '4', '5', '6'];
+function dolabFloorExtras(f, F) {
+  // service shaft: one vertical riser for every toilet, kitchen and bathroom vent
+  const z0 = 6.3, z1 = f === 1 ? 6.91 : 6.85;
+  for (const [x0, x1] of [[4.78, 4.925], [5.075, 5.22]]) { const m = box(F.hall, SH.shaft, [x0, z0, x1, z1], 0, H); m.userData.shaft = true; collide[f].push([x0, z0, x1, z1]); }
+  if (f > 1) { cyl(F.hall, SH.hallLight, 5.0, H - 0.02, 9.35, 0.12, 0.02, { cast: false }); if (f === 2) box(F.hall, SH.hallLight, [4.2, 8.0, 4.215, 8.4], 1.6, 1.7, { cast: false, uv: false }); }
+}
+function dolabStair() {
+  const g = FLOOR[2].hall, R = FH / 17, T = 0.24;
+  const step = (poly, top) => {
+    const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: top, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, SH.stair); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    const nose = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false }).rotateX(-Math.PI / 2), SH.stairEdge); nose.position.y = top; g.add(nose);
+  };
+  for (let i = 0; i < 8; i++) { const za = 9.85 - (i + 1) * T, zb = 9.85 - i * T; step([[4.15, za], [4.95, za], [4.95, zb], [4.15, zb]], (i + 1) * R); }
+  const c = [5.0, 7.93];
+  const W = [[[c[0], c[1]], [4.15, 7.93], [4.15, 7.08]], [[c[0], c[1]], [4.15, 7.08], [4.15, 6.95], [5.0, 6.95]], [[c[0], c[1]], [5.0, 6.95], [5.85, 6.95], [5.85, 7.08]], [[c[0], c[1]], [5.85, 7.08], [5.85, 7.93]]];
+  W.forEach((p, i) => step(p, (9 + i) * R));
+  for (let j = 0; j < 4; j++) { const za = 7.93 + j * T, zb = 7.93 + (j + 1) * T; step([[5.05, za], [5.85, za], [5.85, zb], [5.05, zb]], (13 + j) * R); }
+  // central newel, well wall and handrails
+  box(g, SH.railing, [4.97, 7.9, 5.03, 7.96], 0, 3.0 + 0.9, { cast: false });
+  box(g, SH.stair, [4.96, 7.96, 5.04, 9.85], 0, 0.9, { cast: false });
+  const rail = (a, b) => { const v = new THREE.Vector3().subVectors(b, a); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, v.length(), 10), SH.railing); m.position.copy(a).addScaledVector(v, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().normalize()); g.add(m); };
+  rail(new THREE.Vector3(4.18, 0.9, 9.85), new THREE.Vector3(4.18, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.82, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.82, 0.9 + 16 * R, 8.89));
+  rail(new THREE.Vector3(5.0, 0.9, 9.85), new THREE.Vector3(5.0, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.0, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.0, 0.9 + 16 * R, 8.89));
+  // floor 3 balustrade along the top landing edge (glass)
+  const g3 = FLOOR[3].hall; const gl = box(g3, SH.glass, [4.15, 8.885, 4.95, 8.895], 0, 1.0, { cast: false, recv: false, uv: false }); gl.renderOrder = 3;
+  box(g3, SH.railing, [4.15, 8.875, 4.95, 8.905], 0.98, 1.02, { cast: false });
+}
+function dolabRoof() {
+  slabBox(slabMeshes.roof, ROOF, [0, 0, 10, 10.05], -0.2, 0);
+  const par = new THREE.Group(); par.name = 'parapet'; ROOF.add(par);
+  for (const r of [[0, 0, 10, 0.2], [0, 9.85, 10, 10.05], [0, 0.2, 0.2, 9.85], [9.8, 0.2, 10, 9.85]]) { box(par, SH.facade, r, 0, 0.6); box(par, SH.cap, [r[0] - 0.03, r[1] - 0.03, r[2] + 0.03, r[3] + 0.03], 0.6, 0.66, { cast: false }); }
+  box(par, SH.roof, [0.2, 0.2, 9.8, 9.85], 0.0, 0.05, { cast: false });
+  box(par, SH.cap, [4.78, 6.3, 5.22, 6.85], 0, 0.9); cyl(par, SH.pipeDrain, 5.0, 0.9, 6.58, 0.06, 0.5);
+}
+
+function dolabSite() {
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), SH.grass); ground.rotation.x = -Math.PI / 2; ground.position.set(5, -0.06, -10); ground.receiveShadow = true; SITE.add(ground);
+  box(SITE, SH.paving, [-2.6, -2.6, 10.0, 0], -0.06, -0.03, { cast: false }); box(SITE, SH.paving, [-2.6, 0, 0, 10.05], -0.06, -0.03, { cast: false });
+  box(SITE, SH.paving, [5.0, -9, 6.4, -2.6], -0.06, -0.035, { cast: false });
+  // upper street plateau (floor-2 level) with retaining wall
+  box(SITE, [SH.retain, SH.retain, SH.paving, SH.retain, SH.retain, SH.retain], [-16, 10.05, 26, 14.0], -0.06, 2.98);
+  box(SITE, SH.asphalt, [-16, 14.0, 26, 21], 2.86, 2.9); box(SITE, SH.retain, [-16, 14.0, 26, 21], -0.06, 2.86, { cast: false });
+  box(SITE, SH.cap, [-16, 13.85, 26, 14.0], 2.98, 3.1, { cast: false });
+  for (const x of [-15.9, 25.9]) box(SITE, SH.retain, [x - 0.1, 10.05, x + 0.1, 21], -0.06, 2.9, { cast: false });
+  // garden steps from the street down to the west yard
+  const R = 2.98 / 18, T = 0.28;
+  for (let i = 0; i < 18; i++) { const z1 = 10.05 - i * T, z0 = z1 - T; box(SITE, SH.stair, [-4.6, z0, -3.2, z1], -0.06, 2.98 - i * R, { cast: true }); }
+  box(SITE, SH.railing, [-4.66, 5.0, -4.62, 10.05], 0.9, 3.9, { cast: false });
+  // canopy over the floor-2 doors
+  box(SITE, SH.winFrame, [2.4, 10.05, 7.6, 11.05], 3.0 + 2.35, 3.0 + 2.68);
+  for (const x of [3.1, 4.65, 6.9]) cyl(SITE, SH.extLight, x, 3.0 + 2.33, 10.6, 0.06, 0.02, { cast: false });
+  for (const [x, z, n] of [[-0.03, 3.0, 'W'], [5.0, -0.03, 'N']]) { const v = NV[n]; box(SITE, SH.extLight, v[0] ? [x - 0.06, z - 0.05, x, z + 0.05] : [x - 0.05, z - 0.06, x + 0.05, z], 2.2, 2.4, { cast: false, uv: false }); }
+  for (const [x, z] of [[1.5, -2.2], [8.5, -2.2], [-2.2, 7.5], [-2.2, 1.5]]) { cyl(SITE, SH.winFrame, x, -0.04, z, 0.06, 0.6); cyl(SITE, SH.extLight, x, 0.56, z, 0.055, 0.06, { cast: false }); }
+  // trees
+  const tree = (x, z, y0, s) => { const tg = new THREE.Group(); SITE.add(tg); cyl(tg, SH.trunk, x, y0, z, 0.09 * s, 2.0 * s, { seg: 8 }); const R2 = rng(Math.floor((x + 50) * 10 + z)); for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), R2() < .5 ? SH.leaf : SH.leaf2); m.position.set(x + (R2() - .5) * 1.6 * s, y0 + (2.2 + R2() * 1.4) * s, z + (R2() - .5) * 1.6 * s); m.scale.setScalar((0.6 + R2() * 0.5) * s); m.castShadow = true; tg.add(m); } SITE_TREES.push({ x, z, y0: y0, s, g: tg }); };
+  tree(-6, -5, -0.06, 1.2); tree(2.5, -7, -0.06, 1.0); tree(-7.5, 3, -0.06, 1.1); tree(-9, 12, 2.98, 1.0); tree(14, -6, -0.06, 0.9);
+  // neighbour house, 0.2 m east (blank wall towards us)
+  // ---- modern facade details: wood fins on solid piers (floors 2-3, south + west), planters, name sign on the canopy
+  const wood = new THREE.MeshStandardMaterial({ color: '#a8754c', roughness: 0.62, map: TEX.plank });
+  const finGeo = new THREE.BoxGeometry(1, 1, 1), mx = new THREE.Matrix4(), fins = [];
+  for (const rec of wallRecs) {
+    const w = rec.w; if (rec.f < 2 || !w.ext || !(w.ext[1] === 1 || w.ext[0] === -1)) continue;
+    const outer = w.c + (w.h ? w.ext[1] : w.ext[0]) * (w.t / 2);
+    for (const [a0, a1, y0, y1] of wallPieces(w)) {
+      if (y0 > 0.01 || y1 < H - 0.01 || a1 - a0 < 0.25) continue;
+      for (let a = a0 + 0.03; a < a1 - 0.03; a += 0.085) fins.push([w, outer, a, rec.f]);
+    }
+  }
+  const inst = new THREE.InstancedMesh(finGeo, wood, fins.length);
+  fins.forEach(([w, outer, a, f], i) => {
+    const base = (f - 1) * FH, n = w.h ? w.ext[1] : w.ext[0], off = outer + n * 0.05;
+    const pos = w.h ? new THREE.Vector3(a, base + FH / 2 - 0.1, off) : new THREE.Vector3(off, base + FH / 2 - 0.1, a);
+    const scl = w.h ? new THREE.Vector3(0.045, FH, 0.07) : new THREE.Vector3(0.07, FH, 0.045);
+    mx.compose(pos, new THREE.Quaternion(), scl); inst.setMatrixAt(i, mx);
+  });
+  inst.castShadow = true; inst.receiveShadow = true; SITE.add(inst);
+  for (const [x0, x1] of [[0.2, 2.3], [7.7, 9.8]]) {
+    box(SITE, SH.winFrame, [x0, 10.55, x1, 11.15], 2.98, 3.5);
+    const R3 = rng(Math.floor(x0 * 100));
+    for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(leafGeo, R3() < .5 ? SH.leaf : SH.leaf2); m.position.set(x0 + 0.15 + R3() * (x1 - x0 - 0.3), 3.55 + R3() * 0.35, 10.7 + R3() * 0.3); m.scale.setScalar(0.18 + R3() * 0.14); m.castShadow = true; SITE.add(m); }
+  }
+  {
+    const [c, g] = makeCanvas(1024, 64); g.fillStyle = '#2b2d30'; g.fillRect(0, 0, 1024, 64); g.fillStyle = '#efe6d6';
+    g.font = '600 40px "Noto Serif Georgian", Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('დოლაბაური', 512, 34);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.325), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.15 }));
+    sign.position.set(5.0, 3.0 + 2.515, 11.056); SITE.add(sign);
+    document.fonts?.ready.then(() => { g.fillStyle = '#2b2d30'; g.fillRect(0, 0, 1024, 64); g.fillStyle = '#efe6d6'; g.fillText('დოლაბაური', 512, 34); tex.needsUpdate = true; invalidate(); });
+  }
+  const NEIGHBOR = new THREE.Group(); SITE.add(NEIGHBOR); PROJECT.smartHide.push({ g: NEIGHBOR, show: cam => cam.position.x < 10.4 });
+  box(NEIGHBOR, SH.neighbor, [10.2, -1.5, 19, 10.05], -0.06, 8.4);
+  box(NEIGHBOR, SH.neighbor, [10.2, 10.05, 19, 13.5], 2.98, 8.4);
+  const rf = box(NEIGHBOR, SH.neighborRoof, [10.0, -1.8, 19.3, 13.8], 8.4, 8.6);
+  for (const z of [1.0, 5.0]) for (const y of [1.0, 4.0, 7.0]) { const gl = box(NEIGHBOR, SH.winFrame, [19.0, z, 19.05, z + 1.4], y - 0.0, y + 1.3, { cast: false }); }
+}
+
+
+function dolabMEP() {
+  const riser = (x, z, r, mat) => { const m = cyl(root, mat, x, 0, z, r, 3 * FH + 1.1, { cast: false }); m.userData.mep = true; mepObjs.push(m); };
+  riser(5.0, 6.6, 0.055, SH.pipeDrain); riser(4.86, 6.4, 0.016, SH.pipeCold); riser(5.14, 6.4, 0.016, SH.pipeHot);
+  const duct = box(root, SH.duct, [4.86, 6.72, 5.14, 6.84], 0, 3 * FH + 0.9, { cast: false }); mepObjs.push(duct);
+  const tube = (g, pts, r, mat) => { const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])), false, 'catmullrom', 0); const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, r, 8), mat); g.add(m); };
+  for (const id of IDS) {
+    const P = APT[id].P, g = FLOOR[APT[id].floor].mep, y = 0.035, st = [5.0, 6.6];
+    const k = P.kitchen.r, kf = P.kitchen.face, sinkP = kf === 'W' ? [k[0] + 0.3, P.kitchen.sink] : kf === 'E' ? [k[2] - 0.3, P.kitchen.sink] : [P.kitchen.sink, kf === 'N' ? k[1] + 0.3 : k[3] - 0.3];
+    const pts = { toilet: rc(P.bath.toilet.bowl), vanity: rc(P.bath.vanity.r), shower: rc(P.bath.shower.r), washer: rc(P.bath.washer.r), sink: sinkP };
+    for (const [key, p] of Object.entries(pts)) { tube(g, [[p[0], y, p[1]], [p[0], y, st[1]], [st[0], y, st[1]]], key === 'toilet' ? 0.05 : 0.025, SH.pipeDrain); }
+    if (APT[id].side === 'A') { const el = document.createElement('div'); el.className = 'mk mep'; el.textContent = 'სტოიაკი Ø110 · წყალი · ვენტილაცია'; addLabel(g, el, [5.0, 1.6, 6.6], { layer: 'mep', floor: APT[id].floor }); }
+  }
+}
+
+function dolabProjectTab() {
+  const rows = IDS.map(id => { const a = APT[id]; return `<tr class="click" data-id="${id}"><td><b>ბინა ${id}</b></td><td class="num">${a.floor}</td><td class="num">${fmt(a.area)} მ²</td><td>${a.orient.join(', ')}</td><td>${a.entry}</td></tr>`; }).join('');
+  return `<h2>დოლაბაური</h2><p>სამსართულიანი სახლი, თითო სართულზე ორი ბინა, თითოეულში ორი საძინებელი. შესასვლელები უცვლელია; ავეჯი და დეტალები გავაუმჯობესე, რადგან სახლი ახლა შენდება.</p>
+  <table class="tbl"><thead><tr><th>ბინა</th><th>სართ.</th><th>ფართი</th><th>ფანჯრები</th><th>შესასვლელი</th></tr></thead><tbody>${rows}</tbody></table>
+  <h3>რა გავაუმჯობესე</h3>
+  <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. ექვსივე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–3-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
+  <div class="change"><b>კიბე, რომელიც მართლა ეტევა</b>კიბის უჯრედი ≈1,8 × 2,9 მ-ია. ჩვეულებრივი U-კიბე 3 მ სართულისთვის ≈1,8 × 4,2 მ-ს მოითხოვს. ვაჩვენე კუთხის საფეხურებიანი (მოხვეული) კიბე: 17 საფეხური × 176 მმ, სიღრმე 240 მმ, ზედა მოედანი 0,96 მ — ასე ბინა 5-ისა და 6-ის კარები მოედანზე იღება.</div>
+  <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–3)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
+  <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
+  <div class="change"><b>პირველი სართულის მისაღები</b>სასადილო მაგიდა სამზარეულოსთან გადავიდა, დივნიდან ტელევიზორის ხედს აღარ კეტავს. ბინა 1-ში საწოლი ბინებს შორის კედელთანაა (ფანჯარასთან სათავე აღარ არის), გარდერობი — სამხრეთ კედელზე, მაგიდა — ფანჯარასთან.</div>
+  <div class="change"><b>მაცივრები, გარდერობები, საწოლები</b>გეგმებზე მაცივარი არ იყო — ყველა სამზარეულოს დაემატა სვეტი. ყველა საძინებელში გარდერობია; ვიწრო საძინებლებში 1,4 მ საწოლი, რომ ორივე მხრიდან მიხვიდეთ. საძინებლის კარები ოთახში იღება.</div>
+  <h3>საყურადღებო — არქიტექტორთან გადასახედი</h3>
+  <div class="issue"><b>ბინა 2-ის აღმოსავლეთის ფანჯრები</b>მეზობლის სახლი 20 სმ-შია. გეგმაზე ბინა 2-ის მისაღებსა და საძინებელ 2-ს მხოლოდ აღმოსავლეთის ფანჯრები აქვს — დღის სინათლეს თითქმის ვერ მიიღებენ (3D-ში ჩანს). გადაამოწმეთ, საერთოდ დასაშვებია თუ არა საზღვრის კედელზე ფანჯარა.</div>
+  <div class="issue"><b>სართ. 2-ზე შესვლა</b>სამი კარი სამხრეთით, სართ. 2-ის დონეზე, პირდაპირ გარეთ იღება. ჩავთვალე, რომ ქუჩა სამხრეთით მაღლაა (ფერდობი) და პირველი სართული ეზოს დონეა. თუ ნაკვეთი სწორია, საჭიროა გარე კიბე და აივანი.</div>
+  <div class="issue"><b>კიბის თავისუფალი სიმაღლე</b>ზედა მოედნის ქვეშ, პირველ საფეხურებზე, თავისუფალი სიმაღლე ≈2,0–2,1 მ გამოდის — ზღვარზეა. სართულის სიმაღლის დაზუსტების შემდეგ გადაითვალეთ.</div>
+  <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>ექვსივე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
+  <div class="issue"><b>ბინებს შორის კედელი</b>ხმის იზოლაცია ≥52 დბ: ორმაგი წყობა ან ბლოკი + იზოლაციის ფენა, განსაკუთრებით პირველ სართულზე, სადაც სამზარეულოები ზურგით ერთმანეთზეა.</div>
+  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, ფანჯრების ზომები გეგმიდან (რაფა 0,9 მ, ზედა ნაწილი 2,2 მ), გეგმის ზედა მხარე — ჩრდილოეთი. ახალი ფანჯარა არსად დამატებულა.</p>
+  <h3>როგორ აჩვენებენ დეველოპერები</h3><ul class="checklist"><li>შენობის ხედი და ბინის არჩევა ფასადზე (აქ — მიიტანეთ კურსორი ბინაზე)</li><li>„სათამაშო სახლის“ ხედი მოჭრილი კედლებით</li><li>გეგმა ოთახებითა და ფართებით</li><li>შიგნით სეირნობა</li><li>მოპირკეთების პაკეტები</li><li>დღის დრო და განათების სცენები</li><li>ელექტრო და ინჟინერიის ფენები</li><li>გაზომვა</li><li class="no">ფასები და ხელმისაწვდომობა (თქვენი მონაცემები სჭირდება)</li></ul>`;
+}
+
+
+const PROJECT = defineProject();
+const FH = PROJECT.floorH, H = PROJECT.H, SILL = PROJECT.sill, HEAD = PROJECT.head;
+const FP = PROJECT.footprint;
+const HOOKS = { afterBuild: [], beforeRender: [], afterRender: [], mode: [], focus: [], visibility: [], style: [], styleApplied: [], time: [], walls: [] };
+const RX = { renderOverride: null, busy: 0 };
+const runHooks = (k, ...a) => { for (const fn of HOOKS[k]) { try { fn(...a); } catch (err) { console.error('hook', k, err); } } };
+const APT = PROJECT.apartments, IDS = Object.keys(APT), TOP = PROJECT.floors[PROJECT.floors.length - 1];
 for (const id of IDS) {
   const a = APT[id]; a.id = id; a.base = (a.floor - 1) * FH;
-  a.rooms = a.P.rooms.map(r => ({ ...r, area: rArea(r.r) - (r.sub ? rArea(r.sub) : 0) }));
+  a.rooms = a.P.rooms.map(r => ({ ...r, area: rArea(r.r) - (r.sub ? (Array.isArray(r.sub[0]) ? r.sub : [r.sub]).reduce((s, q) => s + rArea(q), 0) : 0) + (r.add ? r.add.reduce((s, q) => s + rArea(q), 0) : 0) }));
   a.area = a.rooms.reduce((s, r) => s + r.area, 0);
 }
-const FLOORDATA = { 1: floor1(), 2: floorUp(2), 3: floorUp(3) };
+const FLOORDATA = PROJECT.floorData;
 for (const id of IDS) {
   const dirs = new Set();
   for (const w of FLOORDATA[APT[id].floor].walls) if (w.g === id && w.ext && (w.open || []).some(o => o[2] === 'win')) dirs.add(w.ext.join());
@@ -767,7 +948,7 @@ try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 catch (e) { $('#loading p').textContent = 'ამ ბრაუზერმა WebGL ვერ ჩართო, ამიტომ 3D ხედი ვერ ჩაიტვირთება.'; throw e; }
 const isTouch = matchMedia('(pointer: coarse)').matches;
 const state = {
-  focus: '3', mode: 'building', walls: 'smart',
+  focus: PROJECT.defaultFocus, mode: 'building', walls: 'smart',
   layers: { furniture: true, decor: true, lights: false, switches: false, sockets: false, mep: false, dims: false, labels: true },
   time: 18.75, north: 0, scene: {}, levels: {}, cct: 2700, dtw: true, style: {}, quality: isTouch ? 'fast' : 'high', measure: false, room: null,
 };
@@ -991,6 +1172,7 @@ const MATS = {}; for (const id of IDS) MATS[id] = makeMats();
 function resolve(role) { if (role === 'F') return SH.facade; if (role === 'F1') return SH.stone; if (role === 'H') return SH.hallWall; const [g, r] = role.split(':'); return MATS[g][r]; }
 const artMats = {}; for (const id of IDS) artMats[id] = [];
 function applyStyle(id) {
+  runHooks('style', id);
   const s = STYLES[state.style[id]], m = MATS[id];
   const set = (role, col, rough, metal) => { m[role].color.set(col); if (rough != null) m[role].roughness = rough; if (metal != null) m[role].metalness = metal; };
   const fl = s.floor; m.floor.map = TEX[fl.pattern]; m.floor.color.set(fl.color); m.floor.roughness = fl.rough; m.floor.needsUpdate = true;
@@ -1000,6 +1182,7 @@ function applyStyle(id) {
   set('wardrobe', s.wardrobe, 0.55); set('table', s.table, 0.5); set('chairSeat', s.chairSeat, 0.65); set('chairFrame', s.chairFrame, 0.5, 0.2); set('metal', s.metal, s.metalRough, s.metalness); set('fixture', s.fixture, s.metalRough, s.metalness);
   set('rug', s.rug, 1); set('vanity', s.vanity, 0.5); set('curtain', s.curtain, 1); set('tvPanel', s.tvPanel, 0.6); set('joinery', s.joinery, 0.55); set('pot', s.pot, 0.75); set('plate', s.plate, 0.35);
   artMats[id].forEach((am, i) => { am.map?.dispose(); am.map = artTex(s.art, 101 + i * 17 + +id * 7); am.needsUpdate = true; });
+  runHooks('styleApplied', id);
   invalidate();
 }
 
@@ -1068,7 +1251,7 @@ function along(rect, face, w) { const [x0, z0, x1, z1] = rect; return face === '
    ===================================================================== */
 const root = new THREE.Group(); scene.add(root);
 const FLOOR = {};
-for (const f of [1, 2, 3]) {
+for (const f of PROJECT.floors) {
   const g = new THREE.Group(); g.position.y = (f - 1) * FH; root.add(g);
   const F = { root: g, slab: new THREE.Group(), walls: new THREE.Group(), fin: new THREE.Group(), doors: new THREE.Group(), hall: new THREE.Group(), dims: new THREE.Group(), mep: new THREE.Group() };
   for (const k of ['slab', 'walls', 'fin', 'doors', 'hall', 'dims', 'mep']) g.add(F[k]);
@@ -1080,18 +1263,19 @@ for (const id of IDS) {
   AG[id] = { root: g, furn: new THREE.Group(), decor: new THREE.Group(), fix: new THREE.Group(), elec: new THREE.Group(), lab: new THREE.Group() };
   for (const k of ['furn', 'decor', 'fix', 'elec', 'lab']) g.add(AG[id][k]);
 }
-const ROOF = new THREE.Group(); ROOF.position.y = 3 * FH; root.add(ROOF);
+const ROOF = new THREE.Group(); ROOF.position.y = TOP * FH; root.add(ROOF);
 const SITE = new THREE.Group(); root.add(SITE);
+const SITE_TREES = []; // procedural trees, swappable for real models (rx/models.js)
 const labels = [];
 function addLabel(parent, el, pos, meta) { const o = new CSS2DObject(el); o.position.set(...pos); parent.add(o); labels.push({ obj: o, ...meta }); return o; }
 
 /* ---------- walls ---------- */
-const wallRecs = []; const collide = { 1: [], 2: [], 3: [] }; const obstacles = {}; for (const id of IDS) obstacles[id] = [];
+const wallRecs = []; const collide = {}; for (const f of PROJECT.floors) collide[f] = []; const obstacles = {}; for (const id of IDS) obstacles[id] = [];
 function wallPieces(w) {
   const out = []; let cur = w.from; const ops = (w.open || []).slice().sort((a, b) => a[0] - b[0]);
   for (const [s, e, k, sill, head] of ops) {
     if (s > cur + 0.02) out.push([cur, s, 0, H]);
-    if (k === 'door') out.push([s, e, DOOR_H, H]); else if (k === 'entry') out.push([s, e, ENTRY_H, H]); else { out.push([s, e, 0, sill ?? SILL]); out.push([s, e, head ?? HEAD, H]); }
+    if (k === 'door') out.push([s, e, DOOR_H, H]); else if (k === 'entry') out.push([s, e, ENTRY_H, H]); else { if ((sill ?? SILL) > 0.02) out.push([s, e, 0, sill ?? SILL]); if ((head ?? HEAD) < H - 0.02) out.push([s, e, head ?? HEAD, H]); }
     cur = e;
   }
   if (w.to > cur + 0.02) out.push([cur, w.to, 0, H]);
@@ -1104,18 +1288,33 @@ function wallBox(parent, w, a0, a1, y0, y1) {
   else { rect = [w.c - t / 2, a0, w.c + t / 2, a1]; mats = [pos, neg, SH.wallTop, SH.wallTop, endM, endM]; }
   return { m: box(parent, mats, rect, y0, y1), rect };
 }
-function windowParts(parent, w, s, e, sill, head, glassMat) {
+function windowParts(parent, w, s, e, sill, head, glassMat, flags = '') {
   const t = w.t, mid = w.c, g = new THREE.Group(); parent.add(g);
   const fm = SH.winFrame, inSign = w.ext ? -(w.h ? w.ext[1] : w.ext[0]) : 1, F = 0.06, D = 0.07;
-  const along2 = (a0, a1, y0, y1, p0, p1, mat, o) => box(g, mat, w.h ? [a0, p0, a1, p1] : [p0, a0, p1, a1], y0, y1, o);
+  const along2 = (a0, a1, y0, y1, p0, p1, mat, o) => box(g, mat, w.h ? [a0, Math.min(p0, p1), a1, Math.max(p0, p1)] : [Math.min(p0, p1), a0, Math.max(p0, p1), a1], y0, y1, o);
   const p0 = mid - D / 2, p1 = mid + D / 2, o = { cast: false };
   along2(s, e, sill, sill + F, p0, p1, fm, o); along2(s, e, head - F, head, p0, p1, fm, o); along2(s, s + F, sill, head, p0, p1, fm, o); along2(e - F, e, sill, head, p0, p1, fm, o);
-  if (e - s > 1.6) along2((s + e) / 2 - 0.025, (s + e) / 2 + 0.025, sill, head, p0, p1, fm, o);
+  const n = Math.max(1, Math.round((e - s) / 1.35));
+  for (let k = 1; k < n; k++) { const a = s + (k * (e - s)) / n; along2(a - 0.025, a + 0.025, sill, head, p0, p1, fm, o); }
   const gl = along2(s + F, e - F, sill + F, head - F, mid - 0.004, mid + 0.004, glassMat, { cast: false, recv: false, uv: false }); gl.renderOrder = 3;
-  const si0 = inSign > 0 ? mid : mid - t / 2 - 0.04, si1 = inSign > 0 ? mid + t / 2 + 0.04 : mid;
-  along2(s - 0.03, e + 0.03, sill - 0.03, sill, si0, si1, SH.cap, o);
-  const so0 = inSign > 0 ? mid - t / 2 - 0.05 : mid, so1 = inSign > 0 ? mid : mid + t / 2 + 0.05;
-  along2(s - 0.02, e + 0.02, sill - 0.05, sill - 0.01, so0, so1, SH.winFrame, o);
+  const outer = mid - inSign * t / 2;
+  if (sill > 0.1) {
+    const si0 = inSign > 0 ? mid : mid - t / 2 - 0.04, si1 = inSign > 0 ? mid + t / 2 + 0.04 : mid;
+    along2(s - 0.03, e + 0.03, sill - 0.03, sill, si0, si1, SH.cap, o);
+    along2(s - 0.02, e + 0.02, sill - 0.05, sill - 0.01, outer, outer - inSign * 0.05, SH.winFrame, o);
+  }
+  if (flags.includes('frame')) {
+    // projecting metal box surround
+    const q0 = outer, q1 = outer - inSign * 0.14, T = 0.05;
+    along2(s - T, e + T, head, head + T, q0, q1, fm, { cast: true }); along2(s - T, e + T, Math.max(0, sill - T), sill, q0, q1, fm, { cast: true });
+    along2(s - T, s, Math.max(0, sill - T), head + T, q0, q1, fm, { cast: true }); along2(e, e + T, Math.max(0, sill - T), head + T, q0, q1, fm, { cast: true });
+  }
+  if (flags.includes('rail')) {
+    // French balcony: glass balustrade just outside the glazing
+    const r0 = outer - inSign * 0.08, r1 = outer - inSign * 0.1;
+    const rg = along2(s + 0.04, e - 0.04, 0.03, 1.0, r0, r1, SH.glass, { cast: false, recv: false, uv: false }); rg.renderOrder = 3;
+    along2(s + 0.02, e - 0.02, 1.0, 1.04, r0 + 0.01 * -inSign, r1 - 0.01 * -inSign, fm, o);
+  }
   return g;
 }
 function buildWalls(f) {
@@ -1131,10 +1330,10 @@ function buildWalls(f) {
         collide[f].push(rect);
         const t = w.t, L = 0.22;
         const faces = w.h ? [[a0, w.c - t / 2 - L, a1, w.c - t / 2, 'N'], [a0, w.c + t / 2, a1, w.c + t / 2 + L, 'S']] : [[w.c - t / 2 - L, a0, w.c - t / 2, a1, 'W'], [w.c + t / 2, a0, w.c + t / 2 + L, a1, 'E']];
-        for (const [x0, z0, x1, z1, side] of faces) if (x0 > -0.05 && x1 < 10.05 && z0 > -0.05 && z1 < 10.1) aoStrip(F.fin, x0, z0, x1, z1, side);
+        for (const [x0, z0, x1, z1, side] of faces) if (x0 > FP.x0 - 0.05 && x1 < FP.x1 + 0.05 && z0 > FP.z0 - 0.05 && z1 < FP.z1 + 0.05) aoStrip(F.fin, x0, z0, x1, z1, side);
       }
     }
-    for (const [s, e, k, sill, head] of (w.open || [])) if (k === 'win') rec.win.push(windowParts(full, w, s, e, sill ?? SILL, head ?? HEAD, glassMat));
+    for (const [s, e, k, sill, head, flags] of (w.open || [])) if (k === 'win') rec.win.push(windowParts(full, w, s, e, sill ?? SILL, head ?? HEAD, glassMat, flags || ''));
     rec.center = w.h ? new THREE.Vector3((w.from + w.to) / 2, 0, w.c) : new THREE.Vector3(w.c, 0, (w.from + w.to) / 2);
     wallRecs.push(rec);
   }
@@ -1149,95 +1348,15 @@ function buildWalls(f) {
   }
 }
 
-/* ---------- slabs, finishes, hall, stair, shaft ---------- */
-const slabMeshes = { 1: [], 2: [], 3: [], roof: [] };
+/* ---------- slabs and floor finishes (project supplies the shapes) ---------- */
+const slabMeshes = { roof: [] }; for (const f of PROJECT.floors) slabMeshes[f] = [];
 function slabBox(list, parent, r, y0, y1) { const m = box(parent, [SH.band, SH.band, SH.slabTop, SH.ceiling, SH.band, SH.band], r, y0, y1); m.userData.mats = m.material; list.push(m); return m; }
 function buildFloorFabric(f) {
   const F = FLOOR[f];
-  if (f === 3) {
-    slabBox(slabMeshes[3], F.slab, [0, 0, 10, 6.95], -0.2, 0); slabBox(slabMeshes[3], F.slab, [0, 6.95, 4.15, 10.05], -0.2, 0);
-    slabBox(slabMeshes[3], F.slab, [5.85, 6.95, 10, 10.05], -0.2, 0); slabBox(slabMeshes[3], F.slab, [4.15, 8.89, 5.85, 10.05], -0.2, 0);
-  } else slabBox(slabMeshes[f], F.slab, [0, 0, 10, 10.05], -0.2, 0);
-  // cornice band at the floor line
-  if (f > 1) for (const r of [[-0.04, -0.04, 10.04, 0.02], [-0.04, 10.03, 10.04, 10.09], [-0.04, -0.04, 0.02, 10.09], [9.98, -0.04, 10.04, 10.09]]) { const m = box(F.slab, SH.band, r, -0.22, -0.08, { cast: false }); m.userData.mats = SH.band; slabMeshes[f].push(m); }
-  const ids = IDS.filter(id => APT[id].floor === f), [A, B] = ids;
-  if (f === 1) {
-    floorQuad(F.fin, MATS[A].floor, [0.2, 0.2, 4.925, 9.85]); floorQuad(F.fin, MATS[A].bathFloor, [3.35, 7.01, 4.925, 9.85], 0.004);
-    floorQuad(F.fin, MATS[B].floor, [5.075, 0.2, 9.8, 9.85]); floorQuad(F.fin, MATS[B].bathFloor, [5.075, 7.01, 6.56, 9.85], 0.004);
-  } else {
-    floorQuad(F.fin, MATS[A].floor, [0.2, 0.2, 4.925, 6.9]); floorQuad(F.fin, MATS[A].floor, [0.2, 6.9, 4.05, 9.85]); floorQuad(F.fin, MATS[A].bathFloor, [3.45, 3.98, 4.925, 6.85], 0.004);
-    floorQuad(F.fin, MATS[B].floor, [5.075, 0.2, 9.8, 6.9]); floorQuad(F.fin, MATS[B].floor, [5.95, 6.9, 9.8, 9.85]); floorQuad(F.fin, MATS[B].bathFloor, [5.075, 3.98, 6.55, 6.85], 0.004);
-    if (f === 2) floorQuad(F.fin, SH.hallFloor, [4.15, 6.95, 5.85, 9.85], 0.003); else floorQuad(F.fin, SH.hallFloor, [4.15, 8.89, 5.85, 9.85], 0.003);
-  }
-  // service shaft: one vertical riser for every toilet, kitchen and bathroom vent
-  const z0 = 6.3, z1 = f === 1 ? 6.91 : 6.85;
-  for (const [x0, x1, id] of [[4.78, 4.925, A], [5.075, 5.22, B]]) { const m = box(F.hall, SH.shaft, [x0, z0, x1, z1], 0, H); m.userData.shaft = true; collide[f].push([x0, z0, x1, z1]); }
-  // hall lights
-  if (f > 1) {
-    cyl(F.hall, SH.hallLight, 5.0, H - 0.02, 9.35, 0.12, 0.02, { cast: false });
-    if (f === 2) { box(F.hall, SH.hallLight, [4.2, 8.0, 4.215, 8.4], 1.6, 1.7, { cast: false, uv: false }); }
-  }
-}
-function buildStair() {
-  const g = FLOOR[2].hall, R = FH / 17, T = 0.24;
-  const step = (poly, top) => {
-    const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: top, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
-    const m = new THREE.Mesh(geo, SH.stair); m.castShadow = true; m.receiveShadow = true; g.add(m);
-    const nose = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false }).rotateX(-Math.PI / 2), SH.stairEdge); nose.position.y = top; g.add(nose);
-  };
-  for (let i = 0; i < 8; i++) { const za = 9.85 - (i + 1) * T, zb = 9.85 - i * T; step([[4.15, za], [4.95, za], [4.95, zb], [4.15, zb]], (i + 1) * R); }
-  const c = [5.0, 7.93];
-  const W = [[[c[0], c[1]], [4.15, 7.93], [4.15, 7.08]], [[c[0], c[1]], [4.15, 7.08], [4.15, 6.95], [5.0, 6.95]], [[c[0], c[1]], [5.0, 6.95], [5.85, 6.95], [5.85, 7.08]], [[c[0], c[1]], [5.85, 7.08], [5.85, 7.93]]];
-  W.forEach((p, i) => step(p, (9 + i) * R));
-  for (let j = 0; j < 4; j++) { const za = 7.93 + j * T, zb = 7.93 + (j + 1) * T; step([[5.05, za], [5.85, za], [5.85, zb], [5.05, zb]], (13 + j) * R); }
-  // central newel, well wall and handrails
-  box(g, SH.railing, [4.97, 7.9, 5.03, 7.96], 0, 3.0 + 0.9, { cast: false });
-  box(g, SH.stair, [4.96, 7.96, 5.04, 9.85], 0, 0.9, { cast: false });
-  const rail = (a, b) => { const v = new THREE.Vector3().subVectors(b, a); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, v.length(), 10), SH.railing); m.position.copy(a).addScaledVector(v, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().normalize()); g.add(m); };
-  rail(new THREE.Vector3(4.18, 0.9, 9.85), new THREE.Vector3(4.18, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.82, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.82, 0.9 + 16 * R, 8.89));
-  rail(new THREE.Vector3(5.0, 0.9, 9.85), new THREE.Vector3(5.0, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.0, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.0, 0.9 + 16 * R, 8.89));
-  // floor 3 balustrade along the top landing edge (glass)
-  const g3 = FLOOR[3].hall; const gl = box(g3, SH.glass, [4.15, 8.885, 4.95, 8.895], 0, 1.0, { cast: false, recv: false, uv: false }); gl.renderOrder = 3;
-  box(g3, SH.railing, [4.15, 8.875, 4.95, 8.905], 0.98, 1.02, { cast: false });
-}
-function buildRoof() {
-  slabBox(slabMeshes.roof, ROOF, [0, 0, 10, 10.05], -0.2, 0);
-  const par = new THREE.Group(); par.name = 'parapet'; ROOF.add(par);
-  for (const r of [[0, 0, 10, 0.2], [0, 9.85, 10, 10.05], [0, 0.2, 0.2, 9.85], [9.8, 0.2, 10, 9.85]]) { box(par, SH.facade, r, 0, 0.6); box(par, SH.cap, [r[0] - 0.03, r[1] - 0.03, r[2] + 0.03, r[3] + 0.03], 0.6, 0.66, { cast: false }); }
-  box(par, SH.roof, [0.2, 0.2, 9.8, 9.85], 0.0, 0.05, { cast: false });
-  box(par, SH.cap, [4.78, 6.3, 5.22, 6.85], 0, 0.9); cyl(par, SH.pipeDrain, 5.0, 0.9, 6.58, 0.06, 0.5);
-}
-
-/* ---------- site: lower garden, upper street on the south, neighbour 0.2 m east ---------- */
-let NEIGHBOR;
-function buildSite() {
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), SH.grass); ground.rotation.x = -Math.PI / 2; ground.position.set(5, -0.06, -10); ground.receiveShadow = true; SITE.add(ground);
-  box(SITE, SH.paving, [-2.6, -2.6, 10.0, 0], -0.06, -0.03, { cast: false }); box(SITE, SH.paving, [-2.6, 0, 0, 10.05], -0.06, -0.03, { cast: false });
-  box(SITE, SH.paving, [5.0, -9, 6.4, -2.6], -0.06, -0.035, { cast: false });
-  // upper street plateau (floor-2 level) with retaining wall
-  box(SITE, [SH.retain, SH.retain, SH.paving, SH.retain, SH.retain, SH.retain], [-16, 10.05, 26, 14.0], -0.06, 2.98);
-  box(SITE, SH.asphalt, [-16, 14.0, 26, 21], 2.86, 2.9); box(SITE, SH.retain, [-16, 14.0, 26, 21], -0.06, 2.86, { cast: false });
-  box(SITE, SH.cap, [-16, 13.85, 26, 14.0], 2.98, 3.1, { cast: false });
-  for (const x of [-15.9, 25.9]) box(SITE, SH.retain, [x - 0.1, 10.05, x + 0.1, 21], -0.06, 2.9, { cast: false });
-  // garden steps from the street down to the west yard
-  const R = 2.98 / 18, T = 0.28;
-  for (let i = 0; i < 18; i++) { const z1 = 10.05 - i * T, z0 = z1 - T; box(SITE, SH.stair, [-4.6, z0, -3.2, z1], -0.06, 2.98 - i * R, { cast: true }); }
-  box(SITE, SH.railing, [-4.66, 5.0, -4.62, 10.05], 0.9, 3.9, { cast: false });
-  // canopy over the floor-2 doors
-  box(SITE, SH.winFrame, [2.4, 10.05, 7.6, 11.05], 3.0 + 2.45, 3.0 + 2.58);
-  for (const x of [3.1, 4.65, 6.9]) cyl(SITE, SH.extLight, x, 3.0 + 2.43, 10.6, 0.06, 0.02, { cast: false });
-  for (const [x, z, n] of [[-0.03, 3.0, 'W'], [5.0, -0.03, 'N']]) { const v = NV[n]; box(SITE, SH.extLight, v[0] ? [x - 0.06, z - 0.05, x, z + 0.05] : [x - 0.05, z - 0.06, x + 0.05, z], 2.2, 2.4, { cast: false, uv: false }); }
-  for (const [x, z] of [[1.5, -2.2], [8.5, -2.2], [-2.2, 7.5], [-2.2, 1.5]]) { cyl(SITE, SH.winFrame, x, -0.04, z, 0.06, 0.6); cyl(SITE, SH.extLight, x, 0.56, z, 0.055, 0.06, { cast: false }); }
-  // trees
-  const tree = (x, z, y0, s) => { cyl(SITE, SH.trunk, x, y0, z, 0.09 * s, 2.0 * s, { seg: 8 }); const R2 = rng(Math.floor((x + 50) * 10 + z)); for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), R2() < .5 ? SH.leaf : SH.leaf2); m.position.set(x + (R2() - .5) * 1.6 * s, y0 + (2.2 + R2() * 1.4) * s, z + (R2() - .5) * 1.6 * s); m.scale.setScalar((0.6 + R2() * 0.5) * s); m.castShadow = true; SITE.add(m); } };
-  tree(-6, -5, -0.06, 1.2); tree(2.5, -7, -0.06, 1.0); tree(-7.5, 3, -0.06, 1.1); tree(-9, 12, 2.98, 1.0); tree(14, -6, -0.06, 0.9);
-  // neighbour house, 0.2 m east (blank wall towards us)
-  NEIGHBOR = new THREE.Group(); SITE.add(NEIGHBOR);
-  box(NEIGHBOR, SH.neighbor, [10.2, -1.5, 19, 10.05], -0.06, 8.4);
-  box(NEIGHBOR, SH.neighbor, [10.2, 10.05, 19, 13.5], 2.98, 8.4);
-  const rf = box(NEIGHBOR, SH.neighborRoof, [10.0, -1.8, 19.3, 13.8], 8.4, 8.6);
-  for (const z of [1.0, 5.0]) for (const y of [1.0, 4.0, 7.0]) { const gl = box(NEIGHBOR, SH.winFrame, [19.0, z, 19.05, z + 1.4], y - 0.0, y + 1.3, { cast: false }); }
+  for (const r of PROJECT.slabs(f)) slabBox(slabMeshes[f], F.slab, r, -0.2, 0);
+  if (PROJECT.cornice && f > PROJECT.floors[0]) for (const r of [[FP.x0 - 0.04, FP.z0 - 0.04, FP.x1 + 0.04, FP.z0 + 0.02], [FP.x0 - 0.04, FP.z1 - 0.02, FP.x1 + 0.04, FP.z1 + 0.04], [FP.x0 - 0.04, FP.z0 - 0.04, FP.x0 + 0.02, FP.z1 + 0.04], [FP.x1 - 0.02, FP.z0 - 0.04, FP.x1 + 0.04, FP.z1 + 0.04]]) { const m = box(F.slab, SH.band, r, -0.22, -0.08, { cast: false }); m.userData.mats = SH.band; slabMeshes[f].push(m); }
+  for (const [mat, rect, y] of PROJECT.finishes(f)) floorQuad(F.fin, mat, rect, y ?? 0.002);
+  PROJECT.floorExtras?.(f, F);
 }
 
 /* =====================================================================
@@ -1367,7 +1486,7 @@ function deskL(g, m, id, d) {
 }
 function kitchenL(g, m, id, k) {
   const { g: G, L, D } = lframe(g, k.r, k.face);
-  const f0 = along(k.r, k.face, k.fridge[0]), f1 = along(k.r, k.face, k.fridge[1]); const fa = Math.min(f0, f1), fb = Math.max(f0, f1);
+  const f0 = k.fridge ? along(k.r, k.face, k.fridge[0]) : L, f1 = k.fridge ? along(k.r, k.face, k.fridge[1]) : L; const fa = Math.min(f0, f1), fb = Math.max(f0, f1);
   const segs = [[0, fa], [fb, L]].filter(([a, b]) => b - a > 0.05);
   for (const [a, b] of segs) {
     box(G, SH.dark, [a, 0.06, b, D], 0, 0.1, { cast: false });
@@ -1378,14 +1497,12 @@ function kitchenL(g, m, id, k) {
     box(G, m.joinery, [a + 0.03, D - 0.26, b - 0.03, D], 1.5, 1.54);
     box(G, m.circuits.kitchen, [a + 0.06, D - 0.23, b - 0.06, D - 0.21], 1.492, 1.5, { cast: false, uv: false });
   }
-  // fridge column
-  box(G, m.kitchenFront, [fa, 0.0, fb, D], 0.0, 2.2, { r: 0.006 }); box(G, m.wall, [fa, 0.0, fb, D], 2.2, H, { cast: false });
-  box(G, SH.dark, [fa + 0.02, -0.004, fb - 0.02, 0.0], 0.88, 0.89, { cast: false, uv: false });
+  if (k.fridge) { box(G, m.kitchenFront, [fa, 0.0, fb, D], 0.0, 2.2, { r: 0.006 }); box(G, m.wall, [fa, 0.0, fb, D], 2.2, H, { cast: false }); box(G, SH.dark, [fa + 0.02, -0.004, fb - 0.02, 0.0], 0.88, 0.89, { cast: false, uv: false }); }
   const s = along(k.r, k.face, k.sink), h = along(k.r, k.face, k.hob);
   box(G, SH.sink, [s - 0.27, 0.1, s + 0.27, 0.46], 0.86, 0.902, { cast: false });
   cyl(G, m.fixture, s, 0.9, 0.52, 0.016, 0.34); box(G, m.fixture, [s - 0.012, 0.3, s + 0.012, 0.53], 1.21, 1.235, { uv: false });
-  box(G, SH.blackGlass, [h - 0.29, 0.06, h + 0.29, 0.52], 0.9, 0.906, { cast: false, uv: false });
-  for (const [dx, dz] of [[-0.14, -0.12], [0.14, -0.12], [-0.14, 0.12], [0.14, 0.12]]) { const ring = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.082, 40), SH.stainless); ring.rotation.x = -Math.PI / 2; ring.position.set(h + dx, 0.907, 0.29 + dz); G.add(ring); }
+  const hw = (k.hobW || 0.58) / 2; box(G, SH.blackGlass, [h - hw, 0.06, h + hw, 0.52], 0.9, 0.906, { cast: false, uv: false });
+  for (const [dx, dz] of (hw > 0.22 ? [[-0.14, -0.12], [0.14, -0.12], [-0.14, 0.12], [0.14, 0.12]] : [[0, -0.1], [0, 0.11]])) { const ring = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.082, 40), SH.stainless); ring.rotation.x = -Math.PI / 2; ring.position.set(h + dx, 0.907, 0.29 + dz); G.add(ring); }
   const R = rng(Math.floor(k.r[0] * 100 + k.r[1]));
   for (let i = 0; i < 3; i++) { const cx = (segs[segs.length - 1][0] + 0.15) + i * 0.18; if (cx < L - 0.1) cyl(G, i % 2 ? SH.ceramic : m.pot, cx, 1.54, D - 0.13, 0.045 + R() * 0.02, 0.1 + R() * 0.12); }
   blob(g, k.r, 0.4, 0.08); obstacles[id].push(k.r);
@@ -1424,14 +1541,19 @@ function vanityL(g, m, id, v) {
   box(G, m.circuits.mirror, [a - 0.03, D - 0.01, b + 0.03, D - 0.004], 1.05, 1.88, { cast: false, uv: false });
   obstacles[id].push(v.r);
 }
+function consoleL(g, m, id, c) {
+  const { g: G, L, D } = lframe(g, c.r, c.face);
+  box(G, m.joinery, [0, 0, L, D], 0.28, 0.58, { r: 0.01 }); box(G, m.circuits.night, [0.05, 0.05, L - 0.05, D - 0.05], 0.27, 0.28, { cast: false, uv: false });
+  if (c.tv) { const a = along(c.r, c.face, c.tv[0]), b = along(c.r, c.face, c.tv[1]), ta = Math.min(a, b), tb = Math.max(a, b), hh = (tb - ta) * 0.5625, cy = c.tv[2] || 1.15; box(G, SH.screen, [ta, D - 0.035, tb, D], cy - hh / 2, cy + hh / 2, { uv: false }); }
+  blob(g, c.r, 0.3, 0.05); obstacles[id].push(c.r);
+}
 function nightstand(g, m, r) { box(g, m.joinery, r, 0.36, 0.5, { r: 0.01 }); box(g, SH.dark, [r[0] + 0.03, r[1] + 0.03, r[2] - 0.03, r[3] - 0.03], 0.355, 0.36, { cast: false }); blob(g, r, 0.22, 0.04); cyl(g, SH.book3, (r[0] + r[2]) / 2 - 0.04, 0.5, (r[1] + r[3]) / 2, 0.05, 0.02, { seg: 4 }); }
-function blindFor(g, w, s, e) {
+function blindFor(g, w, s, e, head = HEAD) {
   const inSign = w.ext ? -(w.h ? w.ext[1] : w.ext[0]) : 1, face = w.c + inSign * (w.t / 2);
   const x = face + inSign * 0.035, m = /^\d$/.test(w.g) ? MATS[w.g] : null; if (!m) return;
-  const r1 = w.h ? [s, x - 0.03, e, x + 0.03] : [x - 0.03, s, x + 0.03, e];
-  box(g, SH.winFrame, [Math.min(r1[0], r1[2]), Math.min(r1[1], r1[3]), Math.max(r1[0], r1[2]), Math.max(r1[1], r1[3])], HEAD + 0.02, HEAD + 0.1, { cast: false, uv: false });
-  const r2 = w.h ? [s + 0.02, x - 0.003, e - 0.02, x + 0.003] : [x - 0.003, s + 0.02, x + 0.003, e - 0.02];
-  box(g, m.curtain, [Math.min(r2[0], r2[2]), Math.min(r2[1], r2[3]), Math.max(r2[0], r2[2]), Math.max(r2[1], r2[3])], HEAD - 0.4, HEAD + 0.02, { uv: false });
+  const fix = r => [Math.min(r[0], r[2]), Math.min(r[1], r[3]), Math.max(r[0], r[2]), Math.max(r[1], r[3])];
+  box(g, SH.winFrame, fix(w.h ? [s, x - 0.03, e, x + 0.03] : [x - 0.03, s, x + 0.03, e]), Math.min(head + 0.02, H - 0.1), Math.min(head + 0.1, H - 0.02), { cast: false, uv: false });
+  box(g, m.curtain, fix(w.h ? [s + 0.02, x - 0.003, e - 0.02, x + 0.003] : [x - 0.003, s + 0.02, x + 0.003, e - 0.02]), head - 0.4, Math.min(head + 0.02, H - 0.1), { uv: false });
 }
 function artFor(g, id, bed, idx) {
   const am = new THREE.MeshStandardMaterial({ roughness: 0.85 }); artMats[id][idx] = am;
@@ -1445,27 +1567,40 @@ function artFor(g, id, bed, idx) {
   const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), am); pl.position.set(...pos); pl.rotation.y = rot; g.add(pl);
 }
 const leafGeo = new THREE.IcosahedronGeometry(1, 0);
+const PIECES = [];
+const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
+function piece(id, parent, role, meta, fn) { const g = new THREE.Group(); g.userData.piece = role; parent.add(g); fn(g); const rec = { id, role, group: g, ...meta }; PIECES.push(rec); return rec; }
+function tableL(g, m, id, r) {
+  const [x0, z0, x1, z1] = r;
+  box(g, m.table, r, 0.72, 0.76, { r: 0.012 });
+  for (const [px, pz] of [[x0 + 0.1, z0 + 0.08], [x1 - 0.1, z0 + 0.08], [x1 - 0.1, z1 - 0.08], [x0 + 0.1, z1 - 0.08]]) box(g, m.chairFrame, [px - 0.025, pz - 0.025, px + 0.025, pz + 0.025], 0, 0.72, { uv: false });
+  blob(g, r, 0.45, 0.25); obstacles[id].push(r);
+}
 function buildApartment(id) {
   const P = APT[id].P, m = MATS[id], G = AG[id];
-  P.beds.forEach(b => { bedL(G.furn, m, id, b.r, b.head, m.circuits.night); b.ns.forEach(r => nightstand(G.furn, m, r)); });
-  P.wardrobes.forEach(w => wardrobeL(G.furn, m, id, w.r, w.face));
-  if (P.storage) storageL(G.furn, m, id, P.storage.r, P.storage.face);
-  if (P.desk) deskL(G.furn, m, id, P.desk);
-  sofa(G.furn, m, id, P.sofa);
-  tvWallL(G.furn, m, id, P.tv);
-  dining(G.furn, m, id, P.dining.r, P.dining.chairs);
-  kitchenL(G.furn, m, id, P.kitchen);
+  P.beds.forEach(b => { piece(id, G.furn, 'bed', { r: b.r, face: OPP[b.head], head: b.head }, g => bedL(g, m, id, b.r, b.head, m.circuits.night)); b.ns.forEach(r => piece(id, G.furn, 'nightstand', { r, face: OPP[b.head] }, g => nightstand(g, m, r))); });
+  P.wardrobes.forEach(w => piece(id, G.furn, 'wardrobe', { r: w.r, face: w.face }, g => wardrobeL(g, m, id, w.r, w.face)));
+  if (P.storage) piece(id, G.furn, 'storage', { r: P.storage.r, face: P.storage.face }, g => storageL(g, m, id, P.storage.r, P.storage.face));
+  if (P.desk) piece(id, G.furn, 'desk', { r: P.desk.r, face: P.desk.face }, g => deskL(g, m, id, P.desk));
+  (P.consoles || []).forEach(c => piece(id, G.furn, 'console', { r: c.r, face: c.face }, g => consoleL(g, m, id, c)));
+  piece(id, G.furn, 'sofa', { segs: P.sofa }, g => sofa(g, m, id, P.sofa));
+  piece(id, G.furn, 'tv', { tv: P.tv }, g => tvWallL(g, m, id, P.tv));
+  piece(id, G.furn, 'diningTable', { r: P.dining.r }, g => tableL(g, m, id, P.dining.r));
+  P.dining.chairs.forEach(([x, z, f]) => piece(id, G.furn, 'chair', { p: [x, z], face: f }, g => chair(g, m, x, z, f)));
+  piece(id, G.furn, 'kitchen', { r: P.kitchen.r, face: P.kitchen.face }, g => kitchenL(g, m, id, P.kitchen));
   const B = P.bath;
-  vanityL(G.furn, m, id, B.vanity); washerL(G.furn, m, id, B.washer.r, B.washer.face);
-  toilet(G.furn, m, id, B.toilet.ledge, B.toilet.bowl);
-  shower(G.furn, m, id, B.shower.r, B.shower.glass, B.shower.head, B.shower.niche);
+  piece(id, G.furn, 'vanity', { r: B.vanity.r, face: B.vanity.face }, g => vanityL(g, m, id, B.vanity));
+  piece(id, G.furn, 'washer', { r: B.washer.r, face: B.washer.face }, g => washerL(g, m, id, B.washer.r, B.washer.face));
+  piece(id, G.furn, 'toilet', { ledge: B.toilet.ledge, bowl: B.toilet.bowl }, g => toilet(g, m, id, B.toilet.ledge, B.toilet.bowl));
+  piece(id, G.furn, 'shower', { r: B.shower.r }, g => shower(g, m, id, B.shower.r, B.shower.glass, B.shower.head, B.shower.niche));
   // decor
-  P.rugs.forEach(r => rug(G.decor, m, r));
-  P.plants.forEach(([x, z], i) => plant(G.decor, m, x, z, 0.95, +id * 7 + i));
+  P.rugs.forEach(r => piece(id, G.decor, 'rug', { r }, g => rug(g, m, r)));
+  P.plants.forEach(([x, z], i) => piece(id, G.decor, 'plant', { p: [x, z] }, g => plant(g, m, x, z, 0.95, +id * 7 + i)));
   P.beds.forEach((b, i) => artFor(G.decor, id, b, i));
-  floorLamp(G.decor, m, m.circuits, P.lamp.base, P.lamp.shade);
-  const d = P.dining.r; cyl(G.decor, SH.ceramic, (d[0] + d[2]) / 2 - 0.25, 0.76, (d[1] + d[3]) / 2, 0.07, 0.2, { rt: 0.04 }); cyl(G.decor, m.pot, (d[0] + d[2]) / 2 + 0.25, 0.76, (d[1] + d[3]) / 2, 0.15, 0.06, { rt: 0.19 });
-  for (const w of FLOORDATA[APT[id].floor].walls) if (w.g === id) for (const [s, e, k] of (w.open || [])) if (k === 'win') blindFor(G.decor, w, s, e);
+  piece(id, G.decor, 'floorLamp', { base: P.lamp.base, shade: P.lamp.shade }, g => floorLamp(g, m, m.circuits, P.lamp.base, P.lamp.shade));
+  const d = P.dining.r, dc = rc(d);
+  piece(id, G.decor, 'tableDecor', { p: dc, y: 0.76 }, g => { cyl(g, SH.ceramic, dc[0] - 0.25, 0.76, dc[1], 0.07, 0.2, { rt: 0.04 }); cyl(g, m.pot, dc[0] + 0.25, 0.76, dc[1], 0.15, 0.06, { rt: 0.19 }); });
+  for (const w of FLOORDATA[APT[id].floor].walls) if (w.g === id) for (const [s, e, k, sill, head] of (w.open || [])) if (k === 'win') blindFor(G.decor, w, s, e, head ?? HEAD);
 }
 
 /* =====================================================================
@@ -1573,14 +1708,7 @@ function poolSlot(type, shadow) {
   POOL.push({ L, type, shadow, def: null });
 }
 for (let i = 0; i < 5; i++) poolSlot('spot', true); poolSlot('point', true); for (let i = 0; i < 3; i++) poolSlot('spot', false); for (let i = 0; i < 3; i++) poolSlot('point', false);
-const EXT_DEFS = [
-  { c: 'ext', t: 'spot', p: [3.1, 5.4, 10.6], tg: [3.1, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
-  { c: 'ext', t: 'spot', p: [4.65, 5.4, 10.6], tg: [4.65, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
-  { c: 'ext', t: 'spot', p: [6.9, 5.4, 10.6], tg: [6.9, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
-  { c: 'ext', t: 'spot', p: [5.7, 2.5, -0.35], tg: [5.7, 0, -1.2], angle: 0.9, power: 8, dist: 5, shadow: 1 },
-  { c: 'ext', t: 'spot', p: [-0.35, 2.5, 3.7], tg: [-1.2, 0, 3.7], angle: 0.9, power: 8, dist: 5, shadow: 1 },
-  { c: 'ext', t: 'point', p: [1.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [8.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [-2.2, 0.7, 7.5], power: 1.2, dist: 3 },
-];
+const EXT_DEFS = PROJECT.extLights || [];
 function assignPool(defs, base) {
   POOL.forEach(s => { s.def = null; s.L.intensity = 0; });
   for (const d of defs) {
@@ -1646,7 +1774,7 @@ function buildElectrical(id) {
 function buildLabels(id) {
   for (const r of APT[id].rooms) {
     const el = document.createElement('div'); el.className = 'rlabel'; el.innerHTML = `<b>${r.name}</b><span>≈ ${fmt(r.area, r.area < 5 ? 2 : 1)} მ²</span>`;
-    const c = rc(r.r); addLabel(AG[id].lab, el, [c[0], 0.08, c[1]], { apt: id, layer: 'labels', floor: APT[id].floor });
+    const c = r.c || rc(r.r); addLabel(AG[id].lab, el, [c[0], 0.08, c[1]], { apt: id, layer: 'labels', floor: APT[id].floor });
   }
 }
 function buildDims(f) {
@@ -1657,21 +1785,8 @@ function buildDims(f) {
     const geo = new THREE.BufferGeometry().setFromPoints(pts); geo.setIndex([0, 1, 2, 3, 4, 5]); g.add(new THREE.LineSegments(geo, mat));
     const el = document.createElement('div'); el.className = 'mk dim-l'; el.textContent = txt; addLabel(g, el, [(a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2], { layer: 'dims', floor: f });
   };
-  L([0, -0.6], [10, -0.6], '10,00 მ'); L([-0.7, 0], [-0.7, 10.05], '10,05 მ'); L([0, 10.65], [5.0, 10.65], '5,00 მ'); L([5.0, 10.65], [10, 10.65], '5,00 მ');
-  const el = document.createElement('div'); el.className = 'mk dim-l'; el.textContent = `სართული ${f} · იატაკი +${fmt((f - 1) * FH, 2)} მ · ჭერი 2,80 მ`; addLabel(g, el, [5, H + 0.3, -0.3], { layer: 'dims', floor: f });
-}
-function buildMEP() {
-  const riser = (x, z, r, mat) => { const m = cyl(root, mat, x, 0, z, r, 3 * FH + 1.1, { cast: false }); m.userData.mep = true; mepObjs.push(m); };
-  riser(5.0, 6.6, 0.055, SH.pipeDrain); riser(4.86, 6.4, 0.016, SH.pipeCold); riser(5.14, 6.4, 0.016, SH.pipeHot);
-  const duct = box(root, SH.duct, [4.86, 6.72, 5.14, 6.84], 0, 3 * FH + 0.9, { cast: false }); mepObjs.push(duct);
-  const tube = (g, pts, r, mat) => { const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])), false, 'catmullrom', 0); const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, r, 8), mat); g.add(m); };
-  for (const id of IDS) {
-    const P = APT[id].P, g = FLOOR[APT[id].floor].mep, y = 0.035, st = [5.0, 6.6];
-    const k = P.kitchen.r, kf = P.kitchen.face, sinkP = kf === 'W' ? [k[0] + 0.3, P.kitchen.sink] : kf === 'E' ? [k[2] - 0.3, P.kitchen.sink] : [P.kitchen.sink, kf === 'N' ? k[1] + 0.3 : k[3] - 0.3];
-    const pts = { toilet: rc(P.bath.toilet.bowl), vanity: rc(P.bath.vanity.r), shower: rc(P.bath.shower.r), washer: rc(P.bath.washer.r), sink: sinkP };
-    for (const [key, p] of Object.entries(pts)) { tube(g, [[p[0], y, p[1]], [p[0], y, st[1]], [st[0], y, st[1]]], key === 'toilet' ? 0.05 : 0.025, SH.pipeDrain); }
-    if (APT[id].side === 'A') { const el = document.createElement('div'); el.className = 'mk mep'; el.textContent = 'სტოიაკი Ø110 · წყალი · ვენტილაცია'; addLabel(g, el, [5.0, 1.6, 6.6], { layer: 'mep', floor: APT[id].floor }); }
-  }
+  for (const [a, b, txt] of PROJECT.dims(f)) L(a, b, txt);
+  const el = document.createElement('div'); el.className = 'mk dim-l'; el.textContent = PROJECT.floors.length > 1 ? `სართული ${f} · იატაკი +${fmt((f - 1) * FH, 2)} მ · ჭერი ${fmt(H, 2)} მ` : `ჭერი ${fmt(H, 2)} მ (სავარაუდო)`; addLabel(g, el, [(FP.x0 + FP.x1) / 2, H + 0.3, FP.z0 - 0.3], { layer: 'dims', floor: f });
 }
 const mepObjs = [];
 
@@ -1718,7 +1833,7 @@ function applyTime() {
   scene.background = mix(SKY); hemi.color.copy(mix(HSKY)); hemi.groundColor.copy(mix(HGND));
   hemi.intensity = lerp(0.2, lerp(1.7, 1.05, warm), day); scene.environmentIntensity = lerp(0.07, lerp(0.42, 0.28, warm), day);
   renderer.toneMappingExposure = lerp(1.25, 1.0, day); bloom.strength = lerp(0.6, 0.22, day);
-  sun.shadow.needsUpdate = true;
+  sun.shadow.needsUpdate = true; runHooks('time', t, nightF);
   const hh = Math.floor(t), mm = Math.round((t - hh) * 60);
   $('#timeOut').textContent = `${String(hh % 24).padStart(2, '0')}:${String(mm === 60 ? 0 : mm).padStart(2, '0')}`;
   $$('#timeChips button').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.t - t) < 0.01));
@@ -1732,22 +1847,22 @@ function refreshShadows() { POOL.forEach(s => { if (s.shadow) s.L.shadow.needsUp
 function setSlab(list, mode) { for (const m of list) m.material = mode === 'shadow' ? SH.shadowOnly : m.userData.mats; }
 function applyVisibility() {
   const bld = state.mode === 'building', walk = state.mode === 'walk', F = APT[state.focus].floor;
-  for (const f of [1, 2, 3]) {
+  for (const f of PROJECT.floors) {
     const G = FLOOR[f]; const show = (k, v) => { G[k].visible = v; };
     if (bld) { G.root.visible = true; ['slab', 'walls', 'fin', 'doors'].forEach(k => show(k, true)); show('hall', false); setSlab(slabMeshes[f], 'normal'); }
-    else if (f < F) { G.root.visible = true; show('slab', true); show('walls', true); show('fin', false); show('doors', false); show('hall', f === 2 && F === 3); setSlab(slabMeshes[f], 'normal'); }
+    else if (f < F) { G.root.visible = true; show('slab', true); show('walls', true); show('fin', false); show('doors', false); show('hall', !!PROJECT.hallBelowVisible?.(f, F)); setSlab(slabMeshes[f], 'normal'); }
     else if (f === F) { G.root.visible = true; ['slab', 'walls', 'fin', 'doors', 'hall'].forEach(k => show(k, true)); setSlab(slabMeshes[f], 'normal'); }
     else if (f === F + 1) { G.root.visible = true; show('slab', true); ['walls', 'fin', 'doors', 'hall'].forEach(k => show(k, false)); setSlab(slabMeshes[f], walk ? 'normal' : 'shadow'); }
     else G.root.visible = false;
     show('dims', !bld && f === F && state.layers.dims); show('mep', !bld && f === F && state.layers.mep);
   }
-  ROOF.visible = bld || F === 3; ROOF.getObjectByName('parapet').visible = bld; setSlab(slabMeshes.roof, bld || walk ? 'normal' : 'shadow');
+  ROOF.visible = bld || F === TOP; const par = ROOF.getObjectByName('parapet'); if (par) par.visible = bld; setSlab(slabMeshes.roof, bld || walk ? 'normal' : 'shadow');
   for (const id of IDS) {
     const G = AG[id], on = !bld && APT[id].floor === F;
     G.root.visible = on; G.furn.visible = state.layers.furniture; G.decor.visible = state.layers.decor && state.layers.furniture;
   }
   mepObjs.forEach(o => o.visible = state.layers.mep);
-  for (const f of [1, 2, 3]) FLOOR[f].hall.children.forEach(c => { if (c.userData.shaft) { c.material.transparent = state.layers.mep; c.material.opacity = state.layers.mep ? 0.25 : 1; c.material.depthWrite = !state.layers.mep; } });
+  for (const f of PROJECT.floors) FLOOR[f].hall.children.forEach(c => { if (c.userData.shaft) { c.material.transparent = state.layers.mep; c.material.opacity = state.layers.mep ? 0.25 : 1; c.material.depthWrite = !state.layers.mep; } });
   for (const l of labels) {
     let ok = !bld && state.layers[l.layer];
     if (ok && (l.layer === 'switches' || l.layer === 'sockets' || l.layer === 'lights')) ok = l.apt === state.focus;
@@ -1757,7 +1872,7 @@ function applyVisibility() {
   }
   if (bld) assignPool(EXT_DEFS, 0); else assignPool(LDEFS[state.focus], APT[state.focus].base);
   if (!bld) clearHover();
-  refreshShadows(); updateWalls(true); updateLighting(); invalidate();
+  refreshShadows(); updateWalls(true); updateLighting(); runHooks('visibility'); invalidate();
 }
 const _cut = new Map();
 function updateWalls(force = false) {
@@ -1771,7 +1886,7 @@ function updateWalls(force = false) {
     if (!force && _cut.get(rec) === cut) continue; _cut.set(rec, cut);
     rec.low.visible = cut; for (const m of rec.meshes) m.material = cut ? SH.shadowOnly : m.userData.mats; for (const wg of rec.win) wg.visible = !cut;
   }
-  if (NEIGHBOR) NEIGHBOR.visible = bld || walk || camera.position.x < 10.4;
+  for (const h of PROJECT.smartHide || []) h.g.visible = bld || walk || h.show(camera);
 }
 
 /* ---------- camera moves ---------- */
@@ -1781,14 +1896,15 @@ function flyTo(pos, target, dur = 1.1, fov = null, done = null) {
   anim = { t: 0, dur, step: (k) => { const e = ease(k); camera.position.lerpVectors(p0, pos, e); controls.target.lerpVectors(t0, target, e); if (fov) { camera.fov = lerp(f0, fov, e); camera.updateProjectionMatrix(); } if (state.mode === 'walk') camera.lookAt(controls.target); }, done };
 }
 const narrow = () => innerWidth < 820;
-function buildingView(dur = 1.4) { const t = new THREE.Vector3(4.2, 3.8, 6.5), dir = new THREE.Vector3(-0.72, 0.52, 1.0).normalize(); flyTo(t.clone().addScaledVector(dir, narrow() ? 40 : 31), t, dur, 40); }
+function buildingView(dur = 1.4) { const v = PROJECT.view.building, t = new THREE.Vector3(...v.target), dir = new THREE.Vector3(...v.dir).normalize(); flyTo(t.clone().addScaledVector(dir, narrow() ? v.dist * 1.3 : v.dist), t, dur, 40); }
 function overview(id = state.focus, dur = 1.2) {
-  const a = APT[id], t = new THREE.Vector3(a.side === 'A' ? 2.5 : 7.5, a.base + 0.3, 5.0);
-  const dir = new THREE.Vector3(a.side === 'A' ? -0.62 : 0.62, 1.25, 0.9).normalize(); flyTo(t.clone().addScaledVector(dir, narrow() ? 20 : 15.5), t, dur, 40);
+  const a = APT[id], c = PROJECT.view.aptCenter(id), t = new THREE.Vector3(c[0], a.base + 0.3, c[1]), dist = PROJECT.view.aptDist || 15.5;
+  const dir = new THREE.Vector3(...PROJECT.view.aptDir(id)).normalize(); flyTo(t.clone().addScaledVector(dir, narrow() ? dist * 1.3 : dist), t, dur, 40);
 }
 function planView(dur = 1.1) {
-  const base = APT[state.focus].base, fov = 30, half = Math.max(10.6 / 2, 10.6 / 2 / camera.aspect) * 1.12 + 1.0, dist = half / Math.tan(THREE.MathUtils.degToRad(fov / 2));
-  flyTo(new THREE.Vector3(5, base + dist, 5.001), new THREE.Vector3(5, base, 5), dur, fov);
+  const base = APT[state.focus].base, fov = 30, cx = (FP.x0 + FP.x1) / 2, cz = (FP.z0 + FP.z1) / 2, w = FP.x1 - FP.x0 + 0.6, d = FP.z1 - FP.z0 + 0.6;
+  const half = Math.max(d / 2, w / 2 / camera.aspect) * 1.12 + 1.0, dist = half / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  flyTo(new THREE.Vector3(cx, base + dist, cz + 0.001), new THREE.Vector3(cx, base, cz), dur, fov);
 }
 function flyRoom(id, r) {
   if (isMobile()) closeSheet();
@@ -1796,7 +1912,7 @@ function flyRoom(id, r) {
   state.room = `${id}:${r.id}`; renderRooms();
   if (state.mode === 'walk') { walkTo(id, r); return; }
   if (state.mode !== 'orbit') setMode('orbit', true);
-  const c = rc(r.r), t = new THREE.Vector3(c[0], APT[id].base + 0.4, c[1]);
+  const c = r.fly || r.c || rc(r.r), t = new THREE.Vector3(c[0], APT[id].base + 0.4, c[1]);
   const dir = new THREE.Vector3(APT[id].side === 'A' ? -0.5 : 0.5, 1.2, 0.85).normalize(); const size = Math.hypot(r.r[2] - r.r[0], r.r[3] - r.r[1]);
   flyTo(t.clone().addScaledVector(dir, size * 1.25 + 3.4), t, 1.1, 40);
 }
@@ -1843,7 +1959,7 @@ function setMode(mode, silent = false) {
   controls.minPolarAngle = 0; controls.maxPolarAngle = mode === 'plan' ? 0.0001 : mode === 'building' ? 1.45 : 1.5;
   if (prev === 'walk' && mode !== 'walk') camera.fov = 40;
   $('#bldBtn').classList.toggle('on', mode === 'building');
-  applyVisibility(); renderHeader(); renderTower(); renderRooms();
+  applyVisibility(); renderHeader(); renderTower(); renderRooms(); runHooks('mode', mode, prev);
   if (silent) return;
   if (mode === 'building') buildingView();
   else if (mode === 'orbit') overview();
@@ -1855,7 +1971,7 @@ function startTour() {
   const list = APT[state.focus].rooms; let i = 0;
   const next = () => {
     if (state.mode !== 'tour') return; const r = list[i % list.length]; i++; state.room = `${state.focus}:${r.id}`; renderRooms();
-    const c = rc(r.r), t = new THREE.Vector3(c[0], APT[state.focus].base + 0.4, c[1]), dir = new THREE.Vector3(APT[state.focus].side === 'A' ? -0.5 : 0.5, 1.0, 0.85).normalize(), size = Math.hypot(r.r[2] - r.r[0], r.r[3] - r.r[1]);
+    const c = r.fly || r.c || rc(r.r), t = new THREE.Vector3(c[0], APT[state.focus].base + 0.4, c[1]), dir = new THREE.Vector3(APT[state.focus].side === 'A' ? -0.5 : 0.5, 1.0, 0.85).normalize(), size = Math.hypot(r.r[2] - r.r[0], r.r[3] - r.r[1]);
     controls.autoRotate = false;
     flyTo(t.clone().addScaledVector(dir, size * 1.1 + 2.6), t, 1.8, 40, () => { if (state.mode !== 'tour') return; controls.autoRotate = true; controls.autoRotateSpeed = 1.1; tourTimer = setTimeout(next, 5200); });
   };
@@ -1864,7 +1980,7 @@ function startTour() {
 function focusApt(id, move = true) {
   state.focus = id; state.room = null; closePop(); clearWires();
   if (state.mode === 'building' || state.mode === 'tour') { state.mode = 'orbit'; $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === 'orbit')); $('#bldBtn').classList.remove('on'); $('#hintText').textContent = 'გადაათრიეთ — ბრუნვა · მარჯვენა ღილაკი — გადაწევა · ბორბალი — მასშტაბი · ორმაგი დაწკაპება — ფოკუსი'; controls.maxPolarAngle = 1.5; }
-  applyVisibility(); renderAll();
+  applyVisibility(); renderAll(); runHooks('focus', id);
   if (move) { if (state.mode === 'plan') planView(); else if (state.mode === 'walk') walkTo(id, APT[id].rooms.find(r => r.id === 'living')); else overview(id); }
 }
 
@@ -1911,20 +2027,19 @@ function closePop() { $('#pop').hidden = true; }
 function aptLabel(id) { return `ბინა ${id}`; }
 function renderHeader() {
   if (state.mode === 'building') {
-    $('#aptTitle').textContent = 'დოლაბაური'; $('#aptEyebrow').textContent = 'საცხოვრებელი სახლი · 3 სართული · 6 ბინა';
-    const tot = IDS.reduce((s, id) => s + APT[id].area, 0);
-    $('#aptFacts').innerHTML = `<span class="fact"><b>${fmt(tot)}</b> მ² ბინები</span><span class="fact">6 × 2 საძინებელი</span><span class="fact">10,00 × 10,05 მ</span><span class="fact">მეზობელი 20 სმ-ში</span>`;
+    $('#aptTitle').textContent = PROJECT.name; $('#aptEyebrow').textContent = PROJECT.eyebrow;
+    $('#aptFacts').innerHTML = PROJECT.facts();
   } else {
     const a = APT[state.focus];
-    $('#aptTitle').innerHTML = `ბინა <em>${state.focus}</em>`; $('#aptEyebrow').textContent = `დოლაბაური · სართული ${a.floor} · ${STYLES[state.style[state.focus]].name}`;
+    $('#aptTitle').innerHTML = `ბინა <em>${state.focus}</em>`; $('#aptEyebrow').textContent = `${PROJECT.name}${PROJECT.floors.length > 1 ? ` · სართული ${a.floor}` : ''} · ${STYLES[state.style[state.focus]].name}`;
     $('#aptFacts').innerHTML = `<span class="fact"><b>${fmt(a.area)}</b> მ²</span><span class="fact">2 საძინებელი · 1 სააბაზანო</span><span class="fact">ფანჯრები: ${a.orient.join(', ')}</span><span class="fact">შესასვლელი: ${a.entry}</span>`;
   }
 }
 function renderTower() {
   const t = $('#tower'); t.innerHTML = '';
-  for (const f of [3, 2, 1]) {
-    const row = document.createElement('div'); row.className = 'trow'; row.innerHTML = `<span class="tf">სართ. ${f}</span>`;
-    for (const id of IDS.filter(i => APT[i].floor === f)) {
+  for (const [label, ids] of PROJECT.tower) {
+    const row = document.createElement('div'); row.className = 'trow'; row.innerHTML = `<span class="tf">${label}</span>`;
+    for (const id of ids) {
       const b = document.createElement('button'); b.innerHTML = `${aptLabel(id)}<small>${fmt(APT[id].area)} მ²</small>`; b.classList.toggle('on', state.mode !== 'building' && state.focus === id);
       b.addEventListener('click', () => { if (isMobile()) closeSheet(); focusApt(id); }); row.appendChild(b);
     }
@@ -1983,24 +2098,7 @@ function renderElecTab() {
   }));
 }
 function renderProjectTab() {
-  const rows = IDS.map(id => { const a = APT[id]; return `<tr class="click" data-id="${id}"><td><b>ბინა ${id}</b></td><td class="num">${a.floor}</td><td class="num">${fmt(a.area)} მ²</td><td>${a.orient.join(', ')}</td><td>${a.entry}</td></tr>`; }).join('');
-  $('#tab-project').innerHTML = `<h2>დოლაბაური</h2><p>სამსართულიანი სახლი, თითო სართულზე ორი ბინა, თითოეულში ორი საძინებელი. შესასვლელები უცვლელია; ავეჯი და დეტალები გავაუმჯობესე, რადგან სახლი ახლა შენდება.</p>
-  <table class="tbl"><thead><tr><th>ბინა</th><th>სართ.</th><th>ფართი</th><th>ფანჯრები</th><th>შესასვლელი</th></tr></thead><tbody>${rows}</tbody></table>
-  <h3>რა გავაუმჯობესე</h3>
-  <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. ექვსივე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–3-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
-  <div class="change"><b>კიბე, რომელიც მართლა ეტევა</b>კიბის უჯრედი ≈1,8 × 2,9 მ-ია. ჩვეულებრივი U-კიბე 3 მ სართულისთვის ≈1,8 × 4,2 მ-ს მოითხოვს. ვაჩვენე კუთხის საფეხურებიანი (მოხვეული) კიბე: 17 საფეხური × 176 მმ, სიღრმე 240 მმ, ზედა მოედანი 0,96 მ — ასე ბინა 5-ისა და 6-ის კარები მოედანზე იღება.</div>
-  <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–3)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
-  <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
-  <div class="change"><b>პირველი სართულის მისაღები</b>სასადილო მაგიდა სამზარეულოსთან გადავიდა, დივნიდან ტელევიზორის ხედს აღარ კეტავს. ბინა 1-ში საწოლი ბინებს შორის კედელთანაა (ფანჯარასთან სათავე აღარ არის), გარდერობი — სამხრეთ კედელზე, მაგიდა — ფანჯარასთან.</div>
-  <div class="change"><b>მაცივრები, გარდერობები, საწოლები</b>გეგმებზე მაცივარი არ იყო — ყველა სამზარეულოს დაემატა სვეტი. ყველა საძინებელში გარდერობია; ვიწრო საძინებლებში 1,4 მ საწოლი, რომ ორივე მხრიდან მიხვიდეთ. საძინებლის კარები ოთახში იღება.</div>
-  <h3>საყურადღებო — არქიტექტორთან გადასახედი</h3>
-  <div class="issue"><b>ბინა 2-ის აღმოსავლეთის ფანჯრები</b>მეზობლის სახლი 20 სმ-შია. გეგმაზე ბინა 2-ის მისაღებსა და საძინებელ 2-ს მხოლოდ აღმოსავლეთის ფანჯრები აქვს — დღის სინათლეს თითქმის ვერ მიიღებენ (3D-ში ჩანს). გადაამოწმეთ, საერთოდ დასაშვებია თუ არა საზღვრის კედელზე ფანჯარა.</div>
-  <div class="issue"><b>სართ. 2-ზე შესვლა</b>სამი კარი სამხრეთით, სართ. 2-ის დონეზე, პირდაპირ გარეთ იღება. ჩავთვალე, რომ ქუჩა სამხრეთით მაღლაა (ფერდობი) და პირველი სართული ეზოს დონეა. თუ ნაკვეთი სწორია, საჭიროა გარე კიბე და აივანი.</div>
-  <div class="issue"><b>კიბის თავისუფალი სიმაღლე</b>ზედა მოედნის ქვეშ, პირველ საფეხურებზე, თავისუფალი სიმაღლე ≈2,0–2,1 მ გამოდის — ზღვარზეა. სართულის სიმაღლის დაზუსტების შემდეგ გადაითვალეთ.</div>
-  <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>ექვსივე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
-  <div class="issue"><b>ბინებს შორის კედელი</b>ხმის იზოლაცია ≥52 დბ: ორმაგი წყობა ან ბლოკი + იზოლაციის ფენა, განსაკუთრებით პირველ სართულზე, სადაც სამზარეულოები ზურგით ერთმანეთზეა.</div>
-  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, ფანჯრების ზომები გეგმიდან (რაფა 0,9 მ, ზედა ნაწილი 2,2 მ), გეგმის ზედა მხარე — ჩრდილოეთი. ახალი ფანჯარა არსად დამატებულა.</p>
-  <h3>როგორ აჩვენებენ დეველოპერები</h3><ul class="checklist"><li>შენობის ხედი და ბინის არჩევა ფასადზე (აქ — მიიტანეთ კურსორი ბინაზე)</li><li>„სათამაშო სახლის“ ხედი მოჭრილი კედლებით</li><li>გეგმა ოთახებითა და ფართებით</li><li>შიგნით სეირნობა</li><li>მოპირკეთების პაკეტები</li><li>დღის დრო და განათების სცენები</li><li>ელექტრო და ინჟინერიის ფენები</li><li>გაზომვა</li><li class="no">ფასები და ხელმისაწვდომობა (თქვენი მონაცემები სჭირდება)</li></ul>`;
+  $('#tab-project').innerHTML = PROJECT.projectTab();
   $$('#tab-project tr.click').forEach(tr => tr.addEventListener('click', () => focusApt(tr.dataset.id)));
 }
 function renderAll() { renderHeader(); renderTower(); renderRooms(); renderDesignTab(); renderLightingTab(); renderElecTab(); }
@@ -2018,7 +2116,7 @@ function pick(e) {
 // building mode: hover / click an apartment volume
 const pickVols = [], hoverBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), SH.pickHL); hoverBox.visible = false; scene.add(hoverBox);
 const hoverEl = document.createElement('div'); hoverEl.className = 'hovercard'; const hoverLbl = new CSS2DObject(hoverEl); hoverLbl.visible = false; scene.add(hoverLbl);
-for (const id of IDS) { const a = APT[id], x0 = a.side === 'A' ? -0.02 : 5.0, x1 = a.side === 'A' ? 5.0 : 10.02; const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, FH - 0.1, 10.1)); m.position.set((x0 + x1) / 2, a.base + FH / 2 - 0.1, 5.02); m.visible = false; m.userData.apt = id; m.updateMatrixWorld(); pickVols.push(m); }
+for (const id of IDS) { const a = APT[id], [x0, z0, x1, z1] = PROJECT.pick(id); const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, FH - 0.1, z1 - z0)); m.position.set((x0 + x1) / 2, a.base + FH / 2 - 0.1, (z0 + z1) / 2); m.visible = false; m.userData.apt = id; m.updateMatrixWorld(); pickVols.push(m); }
 let hovered = null;
 function clearHover() { hovered = null; hoverBox.visible = false; hoverLbl.visible = false; renderer.domElement.style.cursor = ''; }
 function hoverAt(e) {
@@ -2027,7 +2125,7 @@ function hoverAt(e) {
   const id = hit.object.userData.apt; if (hovered === id) return; hovered = id;
   const v = hit.object; hoverBox.position.copy(v.position); hoverBox.scale.set(v.geometry.parameters.width + 0.08, v.geometry.parameters.height, v.geometry.parameters.depth + 0.08); hoverBox.visible = true;
   const a = APT[id]; hoverEl.innerHTML = `<b>ბინა ${id}</b><span>სართული ${a.floor} · ${fmt(a.area)} მ² · 2 საძინებელი</span><span>ფანჯრები: ${a.orient.join(', ')}</span><em>დააწკაპეთ, რომ შიგნით ნახოთ</em>`;
-  hoverLbl.position.set(v.position.x, a.base + FH + 0.4, 10.2); hoverLbl.visible = true; renderer.domElement.style.cursor = 'pointer'; invalidate();
+  hoverLbl.position.set(v.position.x, a.base + FH + 0.4, FP.z1 + 0.15); hoverLbl.visible = true; renderer.domElement.style.cursor = 'pointer'; invalidate();
 }
 let down = null;
 renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now(), yaw: walk.yaw, pitch: walk.pitch }; if (state.mode === 'tour') setMode('orbit', true); if (state.mode === 'walk') renderer.domElement.setPointerCapture(e.pointerId); });
@@ -2136,28 +2234,35 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); let active = false;
   if (anim) { anim.t += dt; const k = Math.min(anim.t / anim.dur, 1); anim.step(k); active = true; if (k >= 1) { const d = anim.done; anim = null; d && d(); } }
   if (state.mode === 'walk') active = stepWalk(dt) || active; else if (controls.enabled && controls.update(dt)) active = true;
-  if (active) needs = true; if (!needs) return; needs = false;
+  for (const fn of HOOKS.beforeRender) { try { if (fn(dt)) active = true; } catch (err) { console.error(err); } }
+  if (active) needs = true;
+  if (RX.renderOverride && RX.renderOverride(active || needs)) { if (needs) labelRenderer.render(scene, camera); needs = false; return; }
+  if (!needs || !stage.clientWidth || !stage.clientHeight) return; needs = false;
   updateWalls();
   if (state.quality === 'high') composer.render(); else renderer.render(scene, camera);
-  labelRenderer.render(scene, camera);
+  labelRenderer.render(scene, camera); runHooks('afterRender');
 }
+
+
 
 /* =====================================================================
    BOOT
    ===================================================================== */
-for (const f of [1, 2, 3]) { buildWalls(f); buildFloorFabric(f); buildDims(f); }
-buildStair(); buildRoof(); buildSite();
+for (const f of PROJECT.floors) { buildWalls(f); buildFloorFabric(f); buildDims(f); }
+PROJECT.extras();
 for (const id of IDS) { buildApartment(id); genLighting(id); buildElectrical(id); buildLabels(id); applyStyle(id); setScene(id, 'relax'); }
-buildMEP();
+PROJECT.mep?.();
+runHooks('afterBuild');
 renderProjectTab(); renderAll();
 if (isMobile() || innerWidth < 1180) document.body.classList.add('right-closed');
 if (isMobile() && isTouch) { const t = $('#toast'); t.hidden = false; setTimeout(() => t.classList.add('gone'), 5000); renderer.domElement.addEventListener('pointerdown', () => t.classList.add('gone'), { once: true }); }
 applyQuality(); applyTime(); setMode('building', true); onResize();
-camera.position.set(-20, 22, 34); controls.target.set(4.2, 3.8, 6.5); controls.update(); buildingView(1.6);
+{ const v = PROJECT.view.building, t = new THREE.Vector3(...v.target), dir = new THREE.Vector3(...v.dir).normalize(); camera.position.copy(t).addScaledVector(dir, v.dist * 1.25); camera.position.y += 6; controls.target.copy(t); controls.update(); } buildingView(1.6);
 frame();
 requestAnimationFrame(() => requestAnimationFrame(() => $('#loading').classList.add('gone')));
 setTimeout(() => $('#loading').classList.add('gone'), 2500);
-window.__d = { state, scene, renderer, camera, controls, focusApt, setMode, invalidate, APT, toggleLayer, flyRoom };
+window.__d = { RX, HOOKS, PIECES, MATS, SH, TEX, FLOOR, AG, PROJECT, state, scene, renderer, camera, controls, focusApt, setMode, invalidate, APT, toggleLayer, flyRoom };
+
 </script>
 </body>
 </html>
