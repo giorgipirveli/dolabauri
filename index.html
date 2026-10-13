@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="დოლაბაური — სამსართულიანი სახლი, 6 ბინა: ინტერაქტიული 3D მოდელი, დიზაინი, განათება, ინჟინერია.">
+<meta name="description" content="დოლაბაური — ოთხსართულიანი სახლი, 8 ბინა: ინტერაქტიული 3D მოდელი, დიზაინი, განათება, ინჟინერია.">
 <meta name="theme-color" content="#16181b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta property="og:title" content="დოლაბაური — 3D">
-<meta property="og:description" content="დოლაბაური — სამსართულიანი სახლი, 6 ბინა: ინტერაქტიული 3D მოდელი, დიზაინი, განათება, ინჟინერია.">
+<meta property="og:description" content="დოლაბაური — ოთხსართულიანი სახლი, 8 ბინა: ინტერაქტიული 3D მოდელი, დიზაინი, განათება, ინჟინერია.">
 <meta property="og:image" content="icon-512.png">
 <title>დოლაბაური</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -287,7 +287,7 @@ h1 em{font-style:normal}
   <div id="loading"><div class="ld">დოლაბაური</div><p>სახლს ვაგებთ…</p></div>
 
   <section id="left" class="panel" aria-label="შენობა და ბინები">
-    <div class="eyebrow" id="aptEyebrow">საცხოვრებელი სახლი · 3 სართული · 6 ბინა</div>
+    <div class="eyebrow" id="aptEyebrow">საცხოვრებელი სახლი · 4 სართული · 8 ბინა</div>
     <h1 id="aptTitle">დოლაბაური</h1>
     <div class="facts" id="aptFacts"></div>
     <div id="chooser" style="display:flex;flex-direction:column;gap:6px">
@@ -494,7 +494,7 @@ const FIXSPEC = {
 
 
 /* =====================================================================
-   PROJECT: DOLABAURI — 3 floors × 2 apartments, footprint 10.0 × 10.05 m.
+   PROJECT: DOLABAURI — 4 floors × 2 apartments, footprint 10.0 × 10.05 m.
    Sloped site: street on the south at floor-2 level. Neighbour house 0.2 m east.
    ===================================================================== */
 function defineProject() {
@@ -537,7 +537,7 @@ function defineProject() {
     return { walls, doors };
   }
   function floorUp(f) {
-    const A = f === 2 ? '3' : '5', B = f === 2 ? '4' : '6', S = 'S' + f;
+    const A = String(2 * f - 1), B = String(2 * f), S = 'S' + f; // floor 2: 3/4, floor 3: 5/6, floor 4: 7/8
     const walls = [
       { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [[0.35, 2.25, 'win', 1.15, 2.6, 'frame'], [2.65, 4.75, 'win', 1.15, 2.6, 'frame']] },
       { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [[5.25, 7.35, 'win', 1.15, 2.6, 'frame'], [7.75, 9.65, 'win', 1.15, 2.6, 'frame']] },
@@ -549,9 +549,9 @@ function defineProject() {
       { g: S, h: 0, c: 5.0, from: 0.2, to: 3.93, t: 0.15, neg: A + ':wall', pos: B + ':wall', party: 1 },
       { g: S, h: 0, c: 5.0, from: 3.93, to: 6.9, t: 0.15, neg: A + ':bathWall', pos: B + ':bathWall', party: 1 },
       { g: S, h: 0, c: 4.1, from: 6.85, to: 8.85, t: 0.1, neg: A + ':backsplash', pos: 'H' },
-      { g: S, h: 0, c: 4.1, from: 8.85, to: 9.85, t: 0.1, neg: A + ':wall', pos: 'H', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
+      { g: S, h: 0, c: 4.1, from: 8.85, to: 9.85, t: 0.1, neg: A + ':wall', pos: 'H', open: f >= 3 ? [[8.95, 9.8, 'door']] : [] },
       { g: S, h: 0, c: 5.9, from: 6.85, to: 8.85, t: 0.1, neg: 'H', pos: B + ':backsplash' },
-      { g: S, h: 0, c: 5.9, from: 8.85, to: 9.85, t: 0.1, neg: 'H', pos: B + ':wall', open: f === 3 ? [[8.95, 9.8, 'door']] : [] },
+      { g: S, h: 0, c: 5.9, from: 8.85, to: 9.85, t: 0.1, neg: 'H', pos: B + ':wall', open: f >= 3 ? [[8.95, 9.8, 'door']] : [] },
     ];
     const inner = [
       { g: A, h: 0, c: 2.45, from: 0.2, to: 3.93, t: 0.1, neg: A + ':wall', pos: A + ':wall' },
@@ -749,15 +749,17 @@ function defineProject() {
     4: { floor: 2, side: 'B', P: mirrorP(PUA(2)), style: 'noir', entry: 'სამხრეთიდან, ქუჩის დონეზე' },
     5: { floor: 3, side: 'A', P: PUA(3), style: 'beton', entry: 'კიბის უჯრედიდან' },
     6: { floor: 3, side: 'B', P: mirrorP(PUA(3)), style: 'warm', entry: 'კიბის უჯრედიდან' },
+    7: { floor: 4, side: 'A', P: PUA(4), style: 'sage', entry: 'კიბის უჯრედიდან' },
+    8: { floor: 4, side: 'B', P: mirrorP(PUA(4)), style: 'kartuli', entry: 'კიბის უჯრედიდან' },
   };
 
   const sideOf = id => apartments[id].side;
   return {
-    key: 'dolabauri', name: 'დოლაბაური', eyebrow: 'საცხოვრებელი სახლი · 3 სართული · 6 ბინა',
-    floorH: 3.0, H: 2.8, sill: 0.9, head: 2.2, floors: [1, 2, 3], footprint: { x0: 0, z0: 0, x1: 10, z1: 10.05 }, cornice: true,
-    floorData: { 1: floor1(), 2: floorUp(2), 3: floorUp(3) }, apartments, defaultFocus: '3', stageFurniture: true,
-    slabs: f => f === 3 ? [[0, 0, 10, 6.95], [0, 6.95, 4.15, 10.05], [5.85, 6.95, 10, 10.05], [4.15, 8.89, 5.85, 10.05]] : [[0, 0, 10, 10.05]],
-    finishes: f => dolabFinishes(f), floorExtras: (f, F) => dolabFloorExtras(f, F), hallBelowVisible: (f, F) => f === 2 && F === 3,
+    key: 'dolabauri', name: 'დოლაბაური', eyebrow: 'საცხოვრებელი სახლი · 4 სართული · 8 ბინა',
+    floorH: 3.0, H: 2.8, sill: 0.9, head: 2.2, floors: [1, 2, 3, 4], footprint: { x0: 0, z0: 0, x1: 10, z1: 10.05 }, cornice: true,
+    floorData: { 1: floor1(), 2: floorUp(2), 3: floorUp(3), 4: floorUp(4) }, apartments, defaultFocus: '3', stageFurniture: true,
+    slabs: f => f >= 3 ? [[0, 0, 10, 6.95], [0, 6.95, 4.15, 10.05], [5.85, 6.95, 10, 10.05], [4.15, 8.89, 5.85, 10.05]] : [[0, 0, 10, 10.05]], // stair well open above floor 2
+    finishes: f => dolabFinishes(f), floorExtras: (f, F) => dolabFloorExtras(f, F), hallBelowVisible: (f, F) => F >= 3 && f === F - 1,
     extras() { dolabStair(); dolabRoof(); dolabSite(); }, mep: () => dolabMEP(), smartHide: [],
     extLights: [
   { c: 'ext', t: 'spot', p: [3.1, 5.4, 10.6], tg: [3.1, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
@@ -768,10 +770,10 @@ function defineProject() {
   { c: 'ext', t: 'point', p: [1.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [8.5, 0.7, -2.2], power: 1.2, dist: 3 }, { c: 'ext', t: 'point', p: [-2.2, 0.7, 7.5], power: 1.2, dist: 3 },
 ],
     dims: () => [[[0, -0.6], [10, -0.6], '10,00 მ'], [[-0.7, 0], [-0.7, 10.05], '10,05 მ'], [[0, 10.65], [5.0, 10.65], '5,00 მ'], [[5.0, 10.65], [10, 10.65], '5,00 მ']],
-    view: { building: { target: [4.2, 3.8, 6.5], dir: [-0.72, 0.52, 1.0], dist: 31 }, aptCenter: id => [sideOf(id) === 'A' ? 2.5 : 7.5, 5.0], aptDir: id => [sideOf(id) === 'A' ? -0.62 : 0.62, 1.25, 0.9], aptDist: 15.5 },
+    view: { building: { target: [4.2, 5.2, 6.5], dir: [-0.72, 0.52, 1.0], dist: 35 }, aptCenter: id => [sideOf(id) === 'A' ? 2.5 : 7.5, 5.0], aptDir: id => [sideOf(id) === 'A' ? -0.62 : 0.62, 1.25, 0.9], aptDist: 15.5 },
     pick: id => sideOf(id) === 'A' ? [-0.02, -0.05, 5.0, 10.1] : [5.0, -0.05, 10.02, 10.1],
-    tower: [['სართ. 3', ['5', '6']], ['სართ. 2', ['3', '4']], ['სართ. 1', ['1', '2']]],
-    facts: () => `<span class="fact"><b>${fmt(IDS.reduce((s, id) => s + APT[id].area, 0))}</b> მ² ბინები</span><span class="fact">6 × 2 საძინებელი</span><span class="fact">10,00 × 10,05 მ</span><span class="fact">მეზობელი 20 სმ-ში</span>`,
+    tower: [['სართ. 4', ['7', '8']], ['სართ. 3', ['5', '6']], ['სართ. 2', ['3', '4']], ['სართ. 1', ['1', '2']]],
+    facts: () => `<span class="fact"><b>${fmt(IDS.reduce((s, id) => s + APT[id].area, 0))}</b> მ² ბინები</span><span class="fact">${IDS.length} × 2 საძინებელი</span><span class="fact">10,00 × 10,05 მ</span><span class="fact">მეზობელი 20 სმ-ში</span>`,
     projectTab: () => dolabProjectTab(),
   };
 }
@@ -792,27 +794,55 @@ function dolabFloorExtras(f, F) {
   if (f > 1) { cyl(F.hall, SH.hallLight, 5.0, H - 0.02, 9.35, 0.12, 0.02, { cast: false }); if (f === 2) box(F.hall, SH.hallLight, [4.2, 8.0, 4.215, 8.4], 1.6, 1.7, { cast: false, uv: false }); }
 }
 function dolabStair() {
-  const g = FLOOR[2].hall, R = FH / 17, T = 0.24;
-  const step = (poly, top) => {
-    const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: top, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
-    const m = new THREE.Mesh(geo, SH.stair); m.castShadow = true; m.receiveShadow = true; g.add(m);
-    const nose = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false }).rotateX(-Math.PI / 2), SH.stairEdge); nose.position.y = top; g.add(nose);
+  // Square-spiral stair in the 1.7 × 1.9 m well: one full turn per floor, 17 risers × 176 mm. Each turn stacks on the
+  // one below, so every landing keeps both flat doors free and headroom is ≈2.8 m. (The earlier winder only worked
+  // while floor 3 was the top floor: a flight up from floor 3 would have started in front of flat 5's door.)
+  const N = 17, R = FH / N, TH = 0.18, c = [5.0, 7.92], X0 = 4.15, X1 = 5.85, Z0 = 6.95, Z1 = 8.89, D = Math.PI * 2 / N, S0 = Math.PI / 2;
+  const hit = (a) => {
+    const dx = Math.cos(a), dz = Math.sin(a); let t = Infinity;
+    if (dx > 1e-9) t = Math.min(t, (X1 - c[0]) / dx); if (dx < -1e-9) t = Math.min(t, (X0 - c[0]) / dx);
+    if (dz > 1e-9) t = Math.min(t, (Z1 - c[1]) / dz); if (dz < -1e-9) t = Math.min(t, (Z0 - c[1]) / dz);
+    return [c[0] + dx * t, c[1] + dz * t];
   };
-  for (let i = 0; i < 8; i++) { const za = 9.85 - (i + 1) * T, zb = 9.85 - i * T; step([[4.15, za], [4.95, za], [4.95, zb], [4.15, zb]], (i + 1) * R); }
-  const c = [5.0, 7.93];
-  const W = [[[c[0], c[1]], [4.15, 7.93], [4.15, 7.08]], [[c[0], c[1]], [4.15, 7.08], [4.15, 6.95], [5.0, 6.95]], [[c[0], c[1]], [5.0, 6.95], [5.85, 6.95], [5.85, 7.08]], [[c[0], c[1]], [5.85, 7.08], [5.85, 7.93]]];
-  W.forEach((p, i) => step(p, (9 + i) * R));
-  for (let j = 0; j < 4; j++) { const za = 7.93 + j * T, zb = 7.93 + (j + 1) * T; step([[5.05, za], [5.85, za], [5.85, zb], [5.05, zb]], (13 + j) * R); }
-  // central newel, well wall and handrails
-  box(g, SH.railing, [4.97, 7.9, 5.03, 7.96], 0, 3.0 + 0.9, { cast: false });
-  box(g, SH.stair, [4.96, 7.96, 5.04, 9.85], 0, 0.9, { cast: false });
-  const rail = (a, b) => { const v = new THREE.Vector3().subVectors(b, a); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, v.length(), 10), SH.railing); m.position.copy(a).addScaledVector(v, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().normalize()); g.add(m); };
-  rail(new THREE.Vector3(4.18, 0.9, 9.85), new THREE.Vector3(4.18, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.82, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.82, 0.9 + 16 * R, 8.89));
-  rail(new THREE.Vector3(5.0, 0.9, 9.85), new THREE.Vector3(5.0, 0.9 + 8 * R, 7.93)); rail(new THREE.Vector3(5.0, 0.9 + 12 * R, 7.93), new THREE.Vector3(5.0, 0.9 + 16 * R, 8.89));
-  // floor 3 balustrade along the top landing edge (glass)
-  const g3 = FLOOR[3].hall; const gl = box(g3, SH.glass, [4.15, 8.885, 4.95, 8.895], 0, 1.0, { cast: false, recv: false, uv: false }); gl.renderOrder = 3;
-  box(g3, SH.railing, [4.15, 8.875, 4.95, 8.905], 0.98, 1.02, { cast: false });
+  const corners = [[X0, Z0], [X1, Z0], [X1, Z1], [X0, Z1]].map(p => [p, Math.atan2(p[1] - c[1], p[0] - c[0])]);
+  const wrap = (a, ref) => { while (a < ref) a += Math.PI * 2; while (a >= ref + Math.PI * 2) a -= Math.PI * 2; return a; };
+  // tread k: wedge from the newel to the well edge; k = 0 is level with the landing (south, in front of the doors)
+  const sector = (k) => {
+    const a0 = S0 + (k - 0.5) * D, a1 = a0 + D, pts = [c, hit(a0)];
+    corners.map(([p, a]) => [p, wrap(a, a0)]).filter(([, a]) => a > a0 && a < a1).sort((p, q) => p[1] - q[1]).forEach(([p]) => pts.push(p));
+    pts.push(hit(a1)); return pts;
+  };
+  const tread = (g, poly, top) => {
+    const sh = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)));
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: TH, bevelEnabled: false }); geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, SH.stair); m.position.y = top - TH; m.castShadow = true; m.receiveShadow = true; g.add(m);
+    const cap = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false }).rotateX(-Math.PI / 2), SH.stairEdge); cap.position.y = top; g.add(cap);
+  };
+  const tube = (g, pts, r) => { const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal'); const m = new THREE.Mesh(new THREE.TubeGeometry(curve, pts.length * 4, r, 8), SH.railing); m.castShadow = true; g.add(m); };
+  for (let f = 2; f < TOP; f++) {
+    const g = FLOOR[f].hall;
+    for (let k = f === 2 ? 1 : 0; k < N; k++) tread(g, sector(k), k * R); // floor 2 has its own hall floor under tread 0
+    cyl(g, SH.railing, c[0], 0, c[1], 0.055, FH, { seg: 16 }); // newel
+    // handrail on the well walls, 0.9 m above the nosing line (kept clear of the landing side)
+    const pts = [];
+    for (let k = 2; k <= 15; k += 0.25) { const p = hit(S0 + k * D), d = Math.hypot(p[0] - c[0], p[1] - c[1]), s = (d - 0.05) / d; pts.push(new THREE.Vector3(c[0] + (p[0] - c[0]) * s, k * R + 0.9, c[1] + (p[1] - c[1]) * s)); }
+    tube(g, pts, 0.02);
+  }
+  // glass guards along the landing edge: the straight edge meets five treads (k = 15, 16, 0, 1, 2), so both ends are
+  // double risers (±353 mm) with a slot under k = 2 — guard them and leave a 1.2 m opening over k = 1 / 0 / 16
+  const guard = (g, a, b, ry = 0) => {
+    const r = ry ? [a[0] - 0.005, a[1], a[0] + 0.005, b] : [a, Z1 - 0.005, b, Z1 + 0.005], rr = ry ? [a[0] - 0.015, a[1], a[0] + 0.015, b] : [a, Z1 - 0.015, b, Z1 + 0.015];
+    const m = box(g, SH.glass, r, 0, 1.0, { ry, cast: false, recv: false, uv: false }); m.renderOrder = 3; box(g, SH.railing, rr, 0.98, 1.02, { ry, cast: false });
+  };
+  const xa = hit(S0 + 1.5 * D)[0], xs = hit(S0 + 0.5 * D)[0], xb = hit(S0 - 1.5 * D)[0];
+  for (let f = 2; f < TOP; f++) guard(FLOOR[f].hall, X0, xa);
+  for (let f = 3; f <= TOP; f++) guard(FLOOR[f].hall, xb, X1);
+  // top floor: only the landing-level tread exists; guard its west edge too (2.8 m drop to the turn below) and cap the newel
+  const gt = FLOOR[TOP].hall; tread(gt, sector(0), 0);
+  guard(gt, X0, xs);
+  const e = hit(S0 + 0.5 * D), L = Math.hypot(e[0] - c[0], e[1] - c[1]), mx = (c[0] + e[0]) / 2, mz = (c[1] + e[1]) / 2;
+  guard(gt, [mx, mz - L / 2], mz + L / 2, -D / 2); // radial panel along the tread 0 / tread 1 edge
+  cyl(gt, SH.railing, c[0], 0, c[1], 0.055, 1.02, { seg: 16 });
 }
 function dolabRoof() {
   slabBox(slabMeshes.roof, ROOF, [0, 0, 10, 10.05], -0.2, 0);
@@ -844,25 +874,22 @@ function dolabSite() {
   const tree = (x, z, y0, s) => { const tg = new THREE.Group(); SITE.add(tg); cyl(tg, SH.trunk, x, y0, z, 0.09 * s, 2.0 * s, { seg: 8 }); const R2 = rng(Math.floor((x + 50) * 10 + z)); for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), R2() < .5 ? SH.leaf : SH.leaf2); m.position.set(x + (R2() - .5) * 1.6 * s, y0 + (2.2 + R2() * 1.4) * s, z + (R2() - .5) * 1.6 * s); m.scale.setScalar((0.6 + R2() * 0.5) * s); m.castShadow = true; tg.add(m); } SITE_TREES.push({ x, z, y0: y0, s, g: tg }); };
   tree(-6, -5, -0.06, 1.2); tree(2.5, -7, -0.06, 1.0); tree(-7.5, 3, -0.06, 1.1); tree(-9, 12, 2.98, 1.0); tree(14, -6, -0.06, 0.9);
   // neighbour house, 0.2 m east (blank wall towards us)
-  // ---- modern facade details: wood fins on solid piers (floors 2-3, south + west), planters, name sign on the canopy
+  // ---- modern facade details: wood fins on solid piers (floors 2-4, south + west), planters, name sign on the canopy
   const wood = new THREE.MeshStandardMaterial({ color: '#a8754c', roughness: 0.62, map: TEX.plank });
-  const finGeo = new THREE.BoxGeometry(1, 1, 1), mx = new THREE.Matrix4(), fins = [];
+  // one instanced batch per wall, in that floor's wall group and the wall's cutaway list, so fins hide with their wall
+  const finGeo = new THREE.BoxGeometry(1, 1, 1), mx = new THREE.Matrix4(), q0 = new THREE.Quaternion();
   for (const rec of wallRecs) {
     const w = rec.w; if (rec.f < 2 || !w.ext || !(w.ext[1] === 1 || w.ext[0] === -1)) continue;
-    const outer = w.c + (w.h ? w.ext[1] : w.ext[0]) * (w.t / 2);
+    const n = w.h ? w.ext[1] : w.ext[0], off = w.c + n * (w.t / 2) + n * 0.05, at = [];
     for (const [a0, a1, y0, y1] of wallPieces(w)) {
       if (y0 > 0.01 || y1 < H - 0.01 || a1 - a0 < 0.25) continue;
-      for (let a = a0 + 0.03; a < a1 - 0.03; a += 0.085) fins.push([w, outer, a, rec.f]);
+      for (let a = a0 + 0.03; a < a1 - 0.03; a += 0.085) at.push(a);
     }
+    if (!at.length) continue;
+    const inst = new THREE.InstancedMesh(finGeo, wood, at.length), scl = w.h ? new THREE.Vector3(0.045, FH, 0.07) : new THREE.Vector3(0.07, FH, 0.045);
+    at.forEach((a, i) => { mx.compose(w.h ? new THREE.Vector3(a, FH / 2 - 0.1, off) : new THREE.Vector3(off, FH / 2 - 0.1, a), q0, scl); inst.setMatrixAt(i, mx); });
+    inst.castShadow = true; inst.receiveShadow = true; FLOOR[rec.f].walls.add(inst); rec.win.push(inst);
   }
-  const inst = new THREE.InstancedMesh(finGeo, wood, fins.length);
-  fins.forEach(([w, outer, a, f], i) => {
-    const base = (f - 1) * FH, n = w.h ? w.ext[1] : w.ext[0], off = outer + n * 0.05;
-    const pos = w.h ? new THREE.Vector3(a, base + FH / 2 - 0.1, off) : new THREE.Vector3(off, base + FH / 2 - 0.1, a);
-    const scl = w.h ? new THREE.Vector3(0.045, FH, 0.07) : new THREE.Vector3(0.07, FH, 0.045);
-    mx.compose(pos, new THREE.Quaternion(), scl); inst.setMatrixAt(i, mx);
-  });
-  inst.castShadow = true; inst.receiveShadow = true; SITE.add(inst);
   for (const [x0, x1] of [[0.2, 2.3], [7.7, 9.8]]) {
     box(SITE, SH.winFrame, [x0, 10.55, x1, 11.15], 2.98, 3.5);
     const R3 = rng(Math.floor(x0 * 100));
@@ -885,9 +912,9 @@ function dolabSite() {
 
 
 function dolabMEP() {
-  const riser = (x, z, r, mat) => { const m = cyl(root, mat, x, 0, z, r, 3 * FH + 1.1, { cast: false }); m.userData.mep = true; mepObjs.push(m); };
+  const riser = (x, z, r, mat) => { const m = cyl(root, mat, x, 0, z, r, TOP * FH + 1.1, { cast: false }); m.userData.mep = true; mepObjs.push(m); };
   riser(5.0, 6.6, 0.055, SH.pipeDrain); riser(4.86, 6.4, 0.016, SH.pipeCold); riser(5.14, 6.4, 0.016, SH.pipeHot);
-  const duct = box(root, SH.duct, [4.86, 6.72, 5.14, 6.84], 0, 3 * FH + 0.9, { cast: false }); mepObjs.push(duct);
+  const duct = box(root, SH.duct, [4.86, 6.72, 5.14, 6.84], 0, TOP * FH + 0.9, { cast: false }); mepObjs.push(duct);
   const tube = (g, pts, r, mat) => { const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])), false, 'catmullrom', 0); const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, r, 8), mat); g.add(m); };
   for (const id of IDS) {
     const P = APT[id].P, g = FLOOR[APT[id].floor].mep, y = 0.035, st = [5.0, 6.6];
@@ -900,22 +927,22 @@ function dolabMEP() {
 
 function dolabProjectTab() {
   const rows = IDS.map(id => { const a = APT[id]; return `<tr class="click" data-id="${id}"><td><b>ბინა ${id}</b></td><td class="num">${a.floor}</td><td class="num">${fmt(a.area)} მ²</td><td>${a.orient.join(', ')}</td><td>${a.entry}</td></tr>`; }).join('');
-  return `<h2>დოლაბაური</h2><p>სამსართულიანი სახლი, თითო სართულზე ორი ბინა, თითოეულში ორი საძინებელი. შესასვლელები უცვლელია; ავეჯი და დეტალები გავაუმჯობესე, რადგან სახლი ახლა შენდება.</p>
+  return `<h2>დოლაბაური</h2><p>ოთხსართულიანი სახლი, თითო სართულზე ორი ბინა, თითოეულში ორი საძინებელი. შესასვლელები უცვლელია; ავეჯი და დეტალები გავაუმჯობესე, რადგან სახლი ახლა შენდება.</p>
   <table class="tbl"><thead><tr><th>ბინა</th><th>სართ.</th><th>ფართი</th><th>ფანჯრები</th><th>შესასვლელი</th></tr></thead><tbody>${rows}</tbody></table>
   <h3>რა გავაუმჯობესე</h3>
-  <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. ექვსივე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–3-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
-  <div class="change"><b>კიბე, რომელიც მართლა ეტევა</b>კიბის უჯრედი ≈1,8 × 2,9 მ-ია. ჩვეულებრივი U-კიბე 3 მ სართულისთვის ≈1,8 × 4,2 მ-ს მოითხოვს. ვაჩვენე კუთხის საფეხურებიანი (მოხვეული) კიბე: 17 საფეხური × 176 მმ, სიღრმე 240 მმ, ზედა მოედანი 0,96 მ — ასე ბინა 5-ისა და 6-ის კარები მოედანზე იღება.</div>
-  <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–3)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
-  <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
+  <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. რვავე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–4-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
+  <div class="change"><b>მე-4 სართული და ახალი კიბე</b>დაემატა მე-4 სართული — ბინები 7 და 8, ზუსტად ისეთივე გეგმით, როგორიც მე-3 სართულს აქვს. ძველი მოხვეული კიბე მხოლოდ მაშინ გამოდგებოდა, როცა მე-3 სართული ბოლო იყო: მე-3 სართულიდან ზემოთ ასასვლელი მარში ბინა 5-ის კარის წინ დაიწყებოდა. ამიტომ ≈1,7 × 2,9 მ კიბის უჯრედში ახლა ხრახნული (სპირალური) კიბეა: ≈1,7 × 1,9 მ კიბეს უჭირავს, ≈1 მ — მოედანს. თითო სართულზე კიბე ერთ სრულ ბრუნს აკეთებს, 17 საფეხურით, თითო 176 მმ სიმაღლის. ყოველი ბრუნი წინას თავზე მეორდება, ამიტომ მე-3 და მე-4 სართულის მოედანზე ორივე ბინის კარი შეუფერხებლად იღება, საფეხურების ზემოთ კი თავისუფალი სიმაღლე ≈2,8 მ-ია. მოედნის კიდეზე, კიბის ორივე ბოლოში, მინის მოაჯირია.</div>
+  <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–4)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
+  <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3–4)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
   <div class="change"><b>პირველი სართულის მისაღები</b>სასადილო მაგიდა სამზარეულოსთან გადავიდა, დივნიდან ტელევიზორის ხედს აღარ კეტავს. ბინა 1-ში საწოლი ბინებს შორის კედელთანაა (ფანჯარასთან სათავე აღარ არის), გარდერობი — სამხრეთ კედელზე, მაგიდა — ფანჯარასთან.</div>
   <div class="change"><b>მაცივრები, გარდერობები, საწოლები</b>გეგმებზე მაცივარი არ იყო — ყველა სამზარეულოს დაემატა სვეტი. ყველა საძინებელში გარდერობია; ვიწრო საძინებლებში 1,4 მ საწოლი, რომ ორივე მხრიდან მიხვიდეთ. საძინებლის კარები ოთახში იღება.</div>
   <h3>საყურადღებო — არქიტექტორთან გადასახედი</h3>
   <div class="issue"><b>ბინა 2-ის აღმოსავლეთის ფანჯრები</b>მეზობლის სახლი 20 სმ-შია. გეგმაზე ბინა 2-ის მისაღებსა და საძინებელ 2-ს მხოლოდ აღმოსავლეთის ფანჯრები აქვს — დღის სინათლეს თითქმის ვერ მიიღებენ (3D-ში ჩანს). გადაამოწმეთ, საერთოდ დასაშვებია თუ არა საზღვრის კედელზე ფანჯარა.</div>
   <div class="issue"><b>სართ. 2-ზე შესვლა</b>სამი კარი სამხრეთით, სართ. 2-ის დონეზე, პირდაპირ გარეთ იღება. ჩავთვალე, რომ ქუჩა სამხრეთით მაღლაა (ფერდობი) და პირველი სართული ეზოს დონეა. თუ ნაკვეთი სწორია, საჭიროა გარე კიბე და აივანი.</div>
-  <div class="issue"><b>კიბის თავისუფალი სიმაღლე</b>ზედა მოედნის ქვეშ, პირველ საფეხურებზე, თავისუფალი სიმაღლე ≈2,0–2,1 მ გამოდის — ზღვარზეა. სართულის სიმაღლის დაზუსტების შემდეგ გადაითვალეთ.</div>
-  <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>ექვსივე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
+  <div class="issue"><b>კიბე 4 სართულისთვის — ნორმებთან შესამოწმებელი</b>სპირალური კიბე პატარა უჯრედში ეტევა, მაგრამ 4-სართულიან საცხოვრებელ სახლში საერთო (საევაკუაციო) კიბისთვის ნორმები ხშირად სწორ მარშებს ითხოვს — ამას ≈2,4 × 4,5 მ უჯრედი სჭირდება. მშენებლობამდე არქიტექტორთან და ხანძარსაწინააღმდეგო ნორმებთან გადაამოწმეთ; ასევე — სჭირდება თუ არა ლიფტი.</div>
+  <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>რვავე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
   <div class="issue"><b>ბინებს შორის კედელი</b>ხმის იზოლაცია ≥52 დბ: ორმაგი წყობა ან ბლოკი + იზოლაციის ფენა, განსაკუთრებით პირველ სართულზე, სადაც სამზარეულოები ზურგით ერთმანეთზეა.</div>
-  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, ფანჯრების ზომები გეგმიდან (რაფა 0,9 მ, ზედა ნაწილი 2,2 მ), გეგმის ზედა მხარე — ჩრდილოეთი. ახალი ფანჯარა არსად დამატებულა.</p>
+  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, გეგმის ზედა მხარე — ჩრდილოეთი. ფანჯრები გადიდებულია ჩრდილოეთის, დასავლეთისა და სამხრეთის ფასადებზე; აღმოსავლეთის (მეზობლის) კედელზე ახალი ფანჯარა არ არის. მე-4 სართული მე-3-ის ზუსტი ასლია.</p>
   <h3>როგორ აჩვენებენ დეველოპერები</h3><ul class="checklist"><li>შენობის ხედი და ბინის არჩევა ფასადზე (აქ — მიიტანეთ კურსორი ბინაზე)</li><li>„სათამაშო სახლის“ ხედი მოჭრილი კედლებით</li><li>გეგმა ოთახებითა და ფართებით</li><li>შიგნით სეირნობა</li><li>მოპირკეთების პაკეტები</li><li>დღის დრო და განათების სცენები</li><li>ელექტრო და ინჟინერიის ფენები</li><li>გაზომვა</li><li class="no">ფასები და ხელმისაწვდომობა (თქვენი მონაცემები სჭირდება)</li></ul>`;
 }
 
