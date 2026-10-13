@@ -482,13 +482,21 @@ const FIXSPEC = {
    Sloped site: street on the south at floor-2 level. Neighbour house 0.2 m east.
    ===================================================================== */
 function defineProject() {
+  // Every window is 1.20 m wide × 1.80 m tall (sill 0.90, head 2.70) with face brick below it, placed inside the
+  // openings the plans already had: as many 1.20 m windows as fit with ≥0.60 m piers, evenly spaced.
+  const WW = 1.2, WS = 0.9, WH = 2.7;
+  const wins = (s, e, flags = '') => {
+    const span = e - s; if (span < WW) return [];
+    const n = Math.max(1, Math.floor((span + 0.6) / (WW + 0.6))), pier = (span - n * WW) / (n + 1);
+    return Array.from({ length: n }, (_, i) => { const a = s + pier + i * (WW + pier); return [+a.toFixed(3), +(a + WW).toFixed(3), 'win', WS, WH, ('brick ' + flags).trim()]; });
+  };
   function floor1() {
     const walls = [
-      { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: [[0.45, 4.6, 'win', 0.8, 2.55]] },
-      { g: '2', h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F1', pos: '2:wall', ext: [0, -1], open: [[5.2, 6.15, 'entry'], [6.25, 6.5, 'win', 0.0, 2.2], [6.95, 9.45, 'win', 0.6, 2.55]] },
-      { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [[0.45, 2.35, 'win', 0.0, 2.55], [3.25, 4.15, 'entry'], [4.4, 6.75, 'win', 0.0, 2.55], [7.3, 9.4, 'win', 0.45, 2.55]] },
+      { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: wins(0.45, 4.6) },
+      { g: '2', h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F1', pos: '2:wall', ext: [0, -1], open: [[5.2, 6.15, 'entry'], ...wins(6.95, 9.45)] },
+      { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [...wins(0.45, 2.35), [3.25, 4.15, 'entry'], ...wins(4.4, 6.75), ...wins(7.3, 9.4)] },
       { g: '2', h: 0, c: 9.9, from: 0, to: 3.08, t: 0.2, neg: '2:accent', pos: 'F1', ext: [1, 0] },
-      { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [[3.69, 6.15, 'win'], [7.2, 9.6, 'win']] },
+      { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [...wins(3.69, 6.15), ...wins(7.2, 9.6)] },
       { g: '1', h: 1, c: 9.95, from: 0, to: 3.3, t: 0.2, neg: '1:accent', pos: 'F1', ext: [0, 1] },
       { g: '1', h: 1, c: 9.95, from: 3.3, to: 5.0, t: 0.2, neg: '1:bathWall', pos: 'F1', ext: [0, 1] },
       { g: '2', h: 1, c: 9.95, from: 5.0, to: 6.61, t: 0.2, neg: '2:bathWall', pos: 'F1', ext: [0, 1] },
@@ -523,13 +531,13 @@ function defineProject() {
   function floorUp(f) {
     const A = String(2 * f - 1), B = String(2 * f), S = 'S' + f; // floor 2: 3/4, floor 3: 5/6, floor 4: 7/8
     const walls = [
-      { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [[0.35, 2.25, 'win', 1.15, 2.6, 'frame'], [2.65, 4.75, 'win', 1.15, 2.6, 'frame']] },
-      { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [[5.25, 7.35, 'win', 1.15, 2.6, 'frame'], [7.75, 9.65, 'win', 1.15, 2.6, 'frame']] },
-      { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: [[0.9, 3.6, 'win', 0.0, 2.6, 'rail frame'], [4.2, 9.65, 'win', 0.0, 2.6, 'rail frame']] },
+      { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [...wins(0.35, 2.25, 'frame'), ...wins(2.65, 4.75, 'frame')] },
+      { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [...wins(5.25, 7.35, 'frame'), ...wins(7.75, 9.65, 'frame')] },
+      { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: [...wins(0.9, 3.6, 'frame'), ...wins(4.2, 9.65, 'frame')] },
       { g: B, h: 0, c: 9.9, from: 0, to: 10.05, t: 0.2, neg: B + ':wall', pos: 'F', ext: [1, 0] },
-      { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[0.3, 2.45, 'win', 0.0, 2.6, 'frame'], [2.65, 3.55, 'entry']] : [[0.3, 3.9, 'win', 0.0, 2.6, 'rail frame']] },
-      { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry'], [5.15, 5.75, 'win', 0.0, 2.2]] : [[4.3, 5.7, 'win', 0.0, 2.6, 'rail']] },
-      { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], [7.55, 9.7, 'win', 0.0, 2.6, 'frame']] : [[6.1, 9.7, 'win', 0.0, 2.6, 'rail frame']] },
+      { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [...wins(0.3, 2.45, 'frame'), [2.65, 3.55, 'entry']] : wins(0.3, 3.9, 'frame') },
+      { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry']] : wins(4.3, 5.7, 'frame') },
+      { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], ...wins(7.55, 9.7, 'frame')] : wins(6.1, 9.7, 'frame') },
       { g: S, h: 0, c: 5.0, from: 0.2, to: 3.93, t: 0.15, neg: A + ':wall', pos: B + ':wall', party: 1 },
       { g: S, h: 0, c: 5.0, from: 3.93, to: 6.9, t: 0.15, neg: A + ':bathWall', pos: B + ':bathWall', party: 1 },
       { g: S, h: 0, c: 4.1, from: 6.85, to: 8.85, t: 0.1, neg: A + ':backsplash', pos: 'H' },
@@ -682,8 +690,8 @@ function defineProject() {
       entryPt: f === 2 ? [3.1, 9.3] : [3.6, 9.35],
       cove: [[0.27, 4.05, 0.27, 9.78], [0.27, 4.05, 3.28, 4.05], [3.28, 4.05, 3.28, 6.97], [3.28, 6.97, 3.98, 6.97], [0.27, 9.78, 3.98, 9.78]],
       beds: [
-        { r: [0.6, 0.2, 2.0, 2.3], head: 'N', room: 'bed1', ns: [[0.22, 0.2, 0.55, 0.5], [2.05, 0.2, 2.38, 0.5]], read: 'globe' },
-        { r: [2.91, 0.2, 4.51, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.86, 0.5], [4.56, 0.2, 4.9, 0.5]], read: 'sconce' },
+        { r: [0.6, 0.2, 2.0, 2.3], head: 'N', room: 'bed1', ns: [[0.22, 0.2, 0.55, 0.5], [2.05, 0.2, 2.38, 0.5]], read: 'globe', hb: 0.85, art: false },
+        { r: [2.91, 0.2, 4.51, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.86, 0.5], [4.56, 0.2, 4.9, 0.5]], read: 'sconce', hb: 0.85, art: false },
       ],
       wardrobes: [{ r: [1.85, 2.55, 2.4, 3.88], face: 'W' }, { r: [4.325, 2.55, 4.925, 3.88], face: 'W' }],
       sofa: [{ r: [0.2, 4.3, 1.1, 5.85], backs: ['W'], arms: ['N'] }, { r: [0.2, 5.85, 1.75, 6.75], backs: ['W'], arms: ['S'] }],
@@ -866,7 +874,7 @@ function dolabSite() {
     const w = rec.w; if (rec.f < 2 || !w.ext || !(w.ext[1] === 1 || w.ext[0] === -1)) continue;
     const n = w.h ? w.ext[1] : w.ext[0], off = w.c + n * (w.t / 2) + n * 0.05, at = [];
     for (const [a0, a1, y0, y1] of wallPieces(w)) {
-      if (y0 > 0.01 || y1 < H - 0.01 || a1 - a0 < 0.25) continue;
+      if (y0 > 0.01 || y1 < H - 0.01 || a1 - a0 < 1.0) continue; // only the wider solid wall: the 0.4–0.6 m piers between the 1.2 m windows stay plain
       for (let a = a0 + 0.03; a < a1 - 0.03; a += 0.085) at.push(a);
     }
     if (!at.length) continue;
@@ -915,6 +923,7 @@ function dolabProjectTab() {
   <table class="tbl"><thead><tr><th>ბინა</th><th>სართ.</th><th>ფართი</th><th>ფანჯრები</th><th>შესასვლელი</th></tr></thead><tbody>${rows}</tbody></table>
   <h3>რა გავაუმჯობესე</h3>
   <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. რვავე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–4-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
+  <div class="change"><b>ფანჯრები 120 × 180 და აგური ფანჯრის ქვეშ</b>ყველა ფანჯარა ერთნაირია: 120 სმ სიგანე, 180 სმ სიმაღლე, რაფა 90 სმ-ზე. თითო ღიობში იმდენი ფანჯარაა, რამდენიც ეტევა, მათ შორის ≥60 სმ კედლით. ფანჯრის ქვეშ, ფანჯრის სიგანეზე, კედელი გარედან აგურისაა. სართ. 2–4-ის საძინებლებში საწოლი ფანჯრის ქვეშაა, ამიტომ საწოლის თავი 85 სმ-მდე დავადაბლე. ქუჩის კარების გვერდით ვიწრო ფანჯრები (60 და 25 სმ) მოვხსენი — 120 სმ იქ არ ეტევა.</div>
   <div class="change"><b>მე-4 სართული და ახალი კიბე</b>დაემატა მე-4 სართული — ბინები 7 და 8, ზუსტად ისეთივე გეგმით, როგორიც მე-3 სართულს აქვს. ძველი მოხვეული კიბე მხოლოდ მაშინ გამოდგებოდა, როცა მე-3 სართული ბოლო იყო: მე-3 სართულიდან ზემოთ ასასვლელი მარში ბინა 5-ის კარის წინ დაიწყებოდა. ამიტომ ≈1,7 × 2,9 მ კიბის უჯრედში ახლა ხრახნული (სპირალური) კიბეა: ≈1,7 × 1,9 მ კიბეს უჭირავს, ≈1 მ — მოედანს. თითო სართულზე კიბე ერთ სრულ ბრუნს აკეთებს, 17 საფეხურით, თითო 176 მმ სიმაღლის. ყოველი ბრუნი წინას თავზე მეორდება, ამიტომ მე-3 და მე-4 სართულის მოედანზე ორივე ბინის კარი შეუფერხებლად იღება, საფეხურების ზემოთ კი თავისუფალი სიმაღლე ≈2,8 მ-ია. მოედნის კიდეზე, კიბის ორივე ბოლოში, მინის მოაჯირია.</div>
   <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–4)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
   <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3–4)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
@@ -926,7 +935,7 @@ function dolabProjectTab() {
   <div class="issue"><b>კიბე 4 სართულისთვის — ნორმებთან შესამოწმებელი</b>სპირალური კიბე პატარა უჯრედში ეტევა, მაგრამ 4-სართულიან საცხოვრებელ სახლში საერთო (საევაკუაციო) კიბისთვის ნორმები ხშირად სწორ მარშებს ითხოვს — ამას ≈2,4 × 4,5 მ უჯრედი სჭირდება. მშენებლობამდე არქიტექტორთან და ხანძარსაწინააღმდეგო ნორმებთან გადაამოწმეთ; ასევე — სჭირდება თუ არა ლიფტი.</div>
   <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>რვავე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
   <div class="issue"><b>ბინებს შორის კედელი</b>ხმის იზოლაცია ≥52 დბ: ორმაგი წყობა ან ბლოკი + იზოლაციის ფენა, განსაკუთრებით პირველ სართულზე, სადაც სამზარეულოები ზურგით ერთმანეთზეა.</div>
-  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, გეგმის ზედა მხარე — ჩრდილოეთი. ფანჯრები გადიდებულია ჩრდილოეთის, დასავლეთისა და სამხრეთის ფასადებზე; აღმოსავლეთის (მეზობლის) კედელზე ახალი ფანჯარა არ არის. მე-4 სართული მე-3-ის ზუსტი ასლია.</p>
+  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, გეგმის ზედა მხარე — ჩრდილოეთი. ყველა ფანჯარა 120 × 180 სმ-ია (რაფა იატაკიდან 90 სმ-ზე, ზედა ნაწილი 270 სმ-ზე), ფანჯრის ქვეშ კედელი გარედან აგურითაა ამოყვანილი. ფანჯრები მხოლოდ გეგმის ღიობებშია; აღმოსავლეთის (მეზობლის) კედელზე ახალი ფანჯარა არ არის. მე-4 სართული მე-3-ის ზუსტი ასლია.</p>
   <h3>როგორ აჩვენებენ დეველოპერები</h3><ul class="checklist"><li>შენობის ხედი და ბინის არჩევა ფასადზე (აქ — მიიტანეთ კურსორი ბინაზე)</li><li>„სათამაშო სახლის“ ხედი მოჭრილი კედლებით</li><li>გეგმა ოთახებითა და ფართებით</li><li>შიგნით სეირნობა</li><li>მოპირკეთების პაკეტები</li><li>დღის დრო და განათების სცენები</li><li>ელექტრო და ინჟინერიის ფენები</li><li>გაზომვა</li><li class="no">ფასები და ხელმისაწვდომობა (თქვენი მონაცემები სჭირდება)</li></ul>`;
 }
 
@@ -1133,6 +1142,17 @@ function stoneTex() {
   }
   const t = toTex(c); t.repeat.set(1 / 2.4, 1 / 2.4); return t;
 }
+// face brick, running bond: 250 × 65 mm bricks, 10 mm mortar; one tile = 4 bricks × 8 courses = 1.04 × 0.60 m
+function brickTex() {
+  const PX = 400, BW = 0.26 * PX, BH = 0.075 * PX, M = 0.01 * PX, W = 4 * BW, Hh = 8 * BH; const [c, g] = makeCanvas(W, Hh); const R = rng(808);
+  g.fillStyle = '#c9c1b4'; g.fillRect(0, 0, W, Hh);
+  for (let r = 0; r < 8; r++) for (let i = -1; i < 5; i++) {
+    const x = i * BW + (r % 2 ? BW / 2 : 0), y = r * BH, h = 12 + R() * 10, sat = 40 + R() * 16, l = 34 + R() * 12;
+    for (const dx of [0, -W, W]) { g.fillStyle = `hsl(${h}, ${sat}%, ${l}%)`; g.fillRect(x + dx + M / 2, y + M / 2, BW - M, BH - M); }
+    for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(${R() < 0.5 ? '0,0,0' : '255,235,215'},${R() * 0.09})`; g.fillRect(((x + R() * BW) % W + W) % W, y + M / 2 + R() * (BH - M), 1 + R() * 3, 1 + R() * 2); }
+  }
+  const t = toTex(c); t.repeat.set(1 / 1.04, 1 / 0.6); return t;
+}
 function noiseTex(base, amp, seed, rep) {
   const S = 512; const [c, g] = makeCanvas(S); const R = rng(seed); g.fillStyle = base; g.fillRect(0, 0, S, S);
   for (let k = 0; k < 22000; k++) { const v = R() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${R() * amp})`; g.fillRect(R() * S, R() * S, 1 + R() * 2, 1 + R() * 2); }
@@ -1142,7 +1162,7 @@ const TEX = {
   herring: herringTex(), plank: plankTex(13, 2.4, 41), plankWide: plankTex(10, 2.4, 87), micro: microTex(),
   tile60: tileTex(2, 2, 1.2, 4), tile120: tileTex(2, 1, 1.2, 8), marble: marbleTex(), quartz: quartzTex(), terrazzo: terrazzoTex(),
   fabric: fabricTex(), rug: rugTex(), blob: blobTex(), ao: aoTex(), hall: tileTex(2, 2, 1.2, 15, 'rgba(0,0,0,.16)'),
-  stone: stoneTex(), render: noiseTex('#dcdcdc', 0.07, 21, 1.5), paving: tileTex(4, 4, 1.6, 33, 'rgba(0,0,0,.22)'), asphalt: noiseTex('#5a5a5a', 0.12, 9, 2), grass: noiseTex('#6f8a4a', 0.18, 13, 3),
+  stone: stoneTex(), render: noiseTex('#dcdcdc', 0.07, 21, 1.5), paving: tileTex(4, 4, 1.6, 33, 'rgba(0,0,0,.22)'), asphalt: noiseTex('#5a5a5a', 0.12, 9, 2), grass: noiseTex('#6f8a4a', 0.18, 13, 3), brick: brickTex(),
 };
 TEX.micro.repeat.set(1 / 2, 1 / 2);
 
@@ -1158,7 +1178,7 @@ const SH = {
   ao: new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: TEX.ao, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
   blob: new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: TEX.blob, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }),
   book1: std('#8b6f4e', 0.8), book2: std('#3d4a52', 0.8), book3: std('#c9b79c', 0.8), wire: std('#151515', 0.6, 0.2),
-  facade: std('#ece8e1', 0.92, 0, { map: TEX.render }), stone: std('#d9cfc0', 0.9, 0, { map: TEX.stone }), band: std('#c9c3b9', 0.85), winFrame: std('#2b2d30', 0.45, 0.4),
+  facade: std('#ece8e1', 0.92, 0, { map: TEX.render }), brick: std('#ffffff', 0.88, 0, { map: TEX.brick }), stone: std('#d9cfc0', 0.9, 0, { map: TEX.stone }), band: std('#c9c3b9', 0.85), winFrame: std('#2b2d30', 0.45, 0.4),
   hallWall: std('#e7e3dc', 0.9), hallFloor: std('#c9c2b6', 0.5, 0, { map: TEX.hall }), stair: std('#d8d2c8', 0.55), stairEdge: std('#3a3b3d', 0.6, 0.3),
   slabTop: std('#9a958e', 0.95), ceiling: std('#f3f1ed', 0.95), wallTop: std('#2a2c2f', 1), roof: std('#8d8a85', 0.95), cap: std('#bdb7ae', 0.8),
   grass: std('#ffffff', 1, 0, { map: TEX.grass }), paving: std('#cfc8bc', 0.85, 0, { map: TEX.paving }), asphalt: std('#ffffff', 0.95, 0, { map: TEX.asphalt }), retain: std('#cfc5b6', 0.9, 0, { map: TEX.stone }),
@@ -1334,9 +1354,13 @@ function buildWalls(f) {
     const full = new THREE.Group(), low = new THREE.Group(); F.walls.add(full, low); low.visible = false;
     const rec = { w, f, full, low, meshes: [], win: [] };
     const glassMat = /^\d$/.test(w.g) ? MATS[w.g].glass : SH.glass;
+    // 'brick' windows: the wall below the sill is face brick on the outside
+    const brick = (w.open || []).filter(o => o[2] === 'win' && /\bbrick\b/.test(o[5] || '')).map(o => [o[0], o[1], o[3] ?? SILL]);
+    const extI = w.pos === 'F' || w.pos === 'F1' ? (w.h ? 4 : 0) : w.neg === 'F' || w.neg === 'F1' ? (w.h ? 5 : 1) : -1;
+    const brickFace = (m, a0, a1, y0, y1) => { if (extI < 0 || y0 > 0.02 || !brick.some(([s, e, sl]) => a0 >= s - 1e-3 && a1 <= e + 1e-3 && y1 <= sl + 1e-3)) return; const mats = m.material.slice(); mats[extI] = SH.brick; m.material = mats; };
     for (const [a0, a1, y0, y1] of wallPieces(w)) {
-      const { m, rect } = wallBox(full, w, a0, a1, y0, y1); rec.meshes.push(m); m.userData.mats = m.material;
-      if (y0 < LOW) wallBox(low, w, a0, a1, y0, Math.min(y1, LOW)).m.castShadow = false;
+      const { m, rect } = wallBox(full, w, a0, a1, y0, y1); brickFace(m, a0, a1, y0, y1); rec.meshes.push(m); m.userData.mats = m.material;
+      if (y0 < LOW) { const lm = wallBox(low, w, a0, a1, y0, Math.min(y1, LOW)).m; lm.castShadow = false; brickFace(lm, a0, a1, y0, Math.min(y1, LOW)); }
       if (y0 < 0.5) {
         collide[f].push(rect);
         const t = w.t, L = 0.22;
@@ -1457,9 +1481,9 @@ function floorLamp(g, m, cm, base, shade) {
   const sh2 = sh.clone(); sh2.material = new THREE.MeshStandardMaterial({ color: '#111', side: THREE.BackSide }); g.add(sh2);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.16, 32), cm.lamp); disc.rotation.x = Math.PI / 2; disc.position.set(sx, sy + 0.02, sz); g.add(disc);
 }
-function bedL(g, m, id, r, head, nightCirc) {
+function bedL(g, m, id, r, head, nightCirc, hb = 1.1) {
   const opp = { N: 'S', S: 'N', E: 'W', W: 'E' }[head]; const { g: G, L: w, D: l } = lframe(g, r, opp);
-  box(G, m.bedFrame, [-0.06, l - 0.05, w + 0.06, l + 0.07], 0, 1.1, { r: 0.03 });
+  box(G, m.bedFrame, [-0.06, l - 0.05, w + 0.06, l + 0.07], 0, hb, { r: 0.03 });
   box(G, SH.dark, [0.18, 0.2, w - 0.18, l - 0.2], 0, 0.1, { cast: false });
   box(G, m.bedFrame, [0, 0, w, l - 0.05], 0.1, 0.34, { r: 0.04 });
   box(G, m.bedding, [0.03, 0.03, w - 0.03, l - 0.07], 0.34, 0.55, { r: 0.05 });
@@ -1589,7 +1613,7 @@ function tableL(g, m, id, r) {
 }
 function buildApartment(id) {
   const P = APT[id].P, m = MATS[id], G = AG[id];
-  P.beds.forEach(b => { piece(id, G.furn, 'bed', { r: b.r, face: OPP[b.head], head: b.head }, g => bedL(g, m, id, b.r, b.head, m.circuits.night)); b.ns.forEach(r => piece(id, G.furn, 'nightstand', { r, face: OPP[b.head] }, g => nightstand(g, m, r))); });
+  P.beds.forEach(b => { piece(id, G.furn, 'bed', { r: b.r, face: OPP[b.head], head: b.head }, g => bedL(g, m, id, b.r, b.head, m.circuits.night, b.hb)); b.ns.forEach(r => piece(id, G.furn, 'nightstand', { r, face: OPP[b.head] }, g => nightstand(g, m, r))); });
   P.wardrobes.forEach(w => piece(id, G.furn, 'wardrobe', { r: w.r, face: w.face }, g => wardrobeL(g, m, id, w.r, w.face)));
   if (P.storage) piece(id, G.furn, 'storage', { r: P.storage.r, face: P.storage.face }, g => storageL(g, m, id, P.storage.r, P.storage.face));
   if (P.desk) piece(id, G.furn, 'desk', { r: P.desk.r, face: P.desk.face }, g => deskL(g, m, id, P.desk));
@@ -1607,7 +1631,7 @@ function buildApartment(id) {
   // decor
   P.rugs.forEach(r => piece(id, G.decor, 'rug', { r }, g => rug(g, m, r)));
   P.plants.forEach(([x, z], i) => piece(id, G.decor, 'plant', { p: [x, z] }, g => plant(g, m, x, z, 0.95, +id * 7 + i)));
-  P.beds.forEach((b, i) => artFor(G.decor, id, b, i));
+  P.beds.forEach((b, i) => { if (b.art !== false) artFor(G.decor, id, b, i); });
   piece(id, G.decor, 'floorLamp', { base: P.lamp.base, shade: P.lamp.shade }, g => floorLamp(g, m, m.circuits, P.lamp.base, P.lamp.shade));
   const d = P.dining.r, dc = rc(d);
   piece(id, G.decor, 'tableDecor', { p: dc, y: 0.76 }, g => { cyl(g, SH.ceramic, dc[0] - 0.25, 0.76, dc[1], 0.07, 0.2, { rt: 0.04 }); cyl(g, m.pot, dc[0] + 0.25, 0.76, dc[1], 0.15, 0.06, { rt: 0.19 }); });
