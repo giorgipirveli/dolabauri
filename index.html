@@ -498,23 +498,24 @@ const FIXSPEC = {
    Sloped site: street on the south at floor-2 level. Neighbour house 0.2 m east.
    ===================================================================== */
 function defineProject() {
-  // Every window is 1.20 m wide × 1.80 m tall (sill 0.90, head 2.70), face brick below. Windows sit side by side in
-  // ribbons: each free stretch of outside wall gets as many 1.20 m windows as fit, centred. A free stretch keeps
-  // 0.30 m of solid wall at building corners, 0.10 m beside partitions, and clears doors and tall furniture.
+  // Every window is 1.20 m wide × 1.80 m tall (sill 0.90, head 2.70) with a blind (opaque glass) panel below it in the
+  // same white frame. Windows sit side by side in ribbons: each free stretch of outside wall gets as many 1.20 m
+  // windows as fit, centred. A stretch keeps 0.05 m clear of the 9 structural columns (40 × 40 cm, see COLUMNS),
+  // 0.30 m of wall at building corners, 0.10 m beside partitions, and clears doors and tall furniture.
   // One ribbon is one opening; the 'module' flag puts a coupling mullion every 1.20 m.
   const WW = 1.2, WS = 0.9, WH = 2.7;
   const wins = (s, e, flags = '') => {
     const n = Math.floor((e - s + 1e-6) / WW); if (n < 1) return [];
     const a = s + (e - s - n * WW) / 2;
-    return [[+a.toFixed(3), +(a + n * WW).toFixed(3), 'win', WS, WH, ('brick module ' + flags).trim()]];
+    return [[+a.toFixed(3), +(a + n * WW).toFixed(3), 'win', WS, WH, ('spandrel module ' + flags).trim()]];
   };
   function floor1() {
     const walls = [
-      { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: wins(0.5, 4.825) },
+      { g: '1', h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F1', pos: '1:wall', ext: [0, -1], open: wins(0.5, 4.75) },
       { g: '2', h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F1', pos: '2:wall', ext: [0, -1], open: [[5.2, 6.15, 'entry'], ...wins(6.79, 9.5)] },
-      { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [...wins(0.5, 2.38), [3.25, 4.15, 'entry'], ...wins(4.25, 6.81), ...wins(7.11, 9.55)] }, // bedroom 1 stops at its wardrobe (z 2.43)
+      { g: '1', h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F1', pos: '1:wall', ext: [-1, 0], open: [...wins(0.5, 2.38), [3.25, 4.15, 'entry'], ...wins(5.275, 6.81), ...wins(7.11, 9.55)] }, // bedroom 1 stops at its wardrobe (z 2.43); column at z 4.83–5.23
       { g: '2', h: 0, c: 9.9, from: 0, to: 3.08, t: 0.2, neg: '2:accent', pos: 'F1', ext: [1, 0] },
-      { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [...wins(3.69, 6.15), ...wins(7.2, 9.6)] },
+      { g: '2', h: 0, c: 9.9, from: 3.08, to: 10.05, t: 0.2, neg: '2:wall', pos: 'F1', ext: [1, 0], open: [...wins(3.23, 4.775), ...wins(5.275, 6.81), ...wins(7.11, 9.55)] }, // the plan's two openings, refitted around the column at z 4.83–5.23
       { g: '1', h: 1, c: 9.95, from: 0, to: 3.3, t: 0.2, neg: '1:accent', pos: 'F1', ext: [0, 1] },
       { g: '1', h: 1, c: 9.95, from: 3.3, to: 5.0, t: 0.2, neg: '1:bathWall', pos: 'F1', ext: [0, 1] },
       { g: '2', h: 1, c: 9.95, from: 5.0, to: 6.61, t: 0.2, neg: '2:bathWall', pos: 'F1', ext: [0, 1] },
@@ -549,13 +550,13 @@ function defineProject() {
   function floorUp(f) {
     const A = String(2 * f - 1), B = String(2 * f), S = 'S' + f; // floor 2: 3/4, floor 3: 5/6, floor 4: 7/8
     const walls = [
-      { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [...wins(0.5, 2.3, 'frame'), ...wins(2.6, 4.825, 'frame')] },
-      { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [...wins(5.175, 7.4, 'frame'), ...wins(7.7, 9.5, 'frame')] },
-      { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: [...wins(0.5, 3.78, 'frame'), ...wins(4.08, 9.55, 'frame')] },
+      { g: A, h: 1, c: 0.1, from: 0, to: 5.0, t: 0.2, neg: 'F', pos: A + ':accent', ext: [0, -1], open: [...wins(0.5, 2.3), ...wins(2.6, 4.75)] },
+      { g: B, h: 1, c: 0.1, from: 5.0, to: 10.0, t: 0.2, neg: 'F', pos: B + ':accent', ext: [0, -1], open: [...wins(5.25, 7.4), ...wins(7.7, 9.5)] },
+      { g: A, h: 0, c: 0.1, from: 0, to: 10.05, t: 0.2, neg: 'F', pos: A + ':wall', ext: [-1, 0], open: [...wins(0.5, 3.78), ...wins(5.275, 9.55)] },
       { g: B, h: 0, c: 9.9, from: 0, to: 10.05, t: 0.2, neg: B + ':wall', pos: 'F', ext: [1, 0] },
-      { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [...wins(0.5, 2.55, 'frame'), [2.65, 3.55, 'entry']] : wins(0.5, 3.95, 'frame') },
-      { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry']] : wins(4.25, 5.75, 'frame') },
-      { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], ...wins(7.45, 9.5, 'frame')] : wins(6.05, 9.5, 'frame') },
+      { g: A, h: 1, c: 9.95, from: 0, to: 4.1, t: 0.2, neg: A + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [...wins(0.5, 2.55), [2.65, 3.55, 'entry']] : wins(0.5, 3.95) },
+      { g: S, h: 1, c: 9.95, from: 4.1, to: 5.9, t: 0.2, neg: 'H', pos: 'F', ext: [0, 1], open: f === 2 ? [[4.25, 5.05, 'entry']] : [] }, // the south-middle column leaves no room for a 1.20 m window
+      { g: B, h: 1, c: 9.95, from: 5.9, to: 10.0, t: 0.2, neg: B + ':wall', pos: 'F', ext: [0, 1], open: f === 2 ? [[6.45, 7.35, 'entry'], ...wins(7.45, 9.5)] : wins(6.05, 9.5) },
       { g: S, h: 0, c: 5.0, from: 0.2, to: 3.93, t: 0.15, neg: A + ':wall', pos: B + ':wall', party: 1 },
       { g: S, h: 0, c: 5.0, from: 3.93, to: 6.9, t: 0.15, neg: A + ':bathWall', pos: B + ':bathWall', party: 1 },
       { g: S, h: 0, c: 4.1, from: 6.85, to: 8.85, t: 0.1, neg: A + ':backsplash', pos: 'H' },
@@ -596,8 +597,8 @@ function defineProject() {
     entryPt: [0.9, 3.7],
     cove: [[0.27, 3.2, 0.27, 6.84], [0.27, 3.2, 4.86, 3.2], [0.27, 6.84, 4.2, 6.84]],
     beds: [
-      { r: [2.775, 0.55, 4.875, 2.15], head: 'E', room: 'bed1', ns: [[4.5, 0.2, 4.9, 0.5], [4.5, 2.2, 4.9, 2.5]], read: 'globe' },
-      { r: [0.6, 7.75, 2.2, 9.85], head: 'S', room: 'bed2', ns: [[0.22, 9.45, 0.56, 9.85], [2.24, 9.45, 2.6, 9.85]], read: 'sconce' },
+      { r: [2.775, 0.7, 4.875, 2.3], head: 'E', room: 'bed1', ns: [[4.5, 0.4, 4.9, 0.68], [4.5, 2.32, 4.9, 2.62]], read: 'globe' },
+      { r: [0.73, 7.75, 2.33, 9.85], head: 'S', room: 'bed2', ns: [[0.4, 9.45, 0.72, 9.85], [2.34, 9.45, 2.64, 9.85]], read: 'sconce' },
     ],
     wardrobes: [{ r: [0.2, 2.43, 3.2, 3.03], face: 'N' }, { r: [2.65, 8.0, 3.25, 9.85], face: 'W' }],
     desk: { r: [0.9, 0.2, 2.3, 0.75], face: 'S', chair: [1.6, 1.05, 'N'] },
@@ -617,26 +618,26 @@ function defineProject() {
       { id: 'ჩ1', room: 'შესასვლელი', p: [0.38, 3.13], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, გვერდით კედელზე. ქვედა ღილაკი გასვლისას ბინაში ყველა სანათს თიშავს.' },
       { id: 'ჩ2', room: 'მისაღები', p: [3.22, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებელი 1-ის კართან, მისაღების მხარეს. შესასვლელის პანელთან ერთად ორი ადგილიდან იმართება.' },
       { id: 'ჩ3', room: 'საძინებელი 1', p: [3.22, 3.03], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს — ხელი მიგიწვდებათ, სანამ კარი ბოლომდე გაიღება.' },
-      { id: 'ჩ4', room: 'საძინებელი 1', p: [4.925, 0.36], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ — ჭერის შუქს ადგომის გარეშე ჩააქრობთ.' },
-      { id: 'ჩ5', room: 'საძინებელი 1', p: [4.925, 2.34], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'საწოლის მეორე მხარეს; მესამე ღილაკი ღამის ბილიკს რთავს.' },
+      { id: 'ჩ4', room: 'საძინებელი 1', p: [4.925, 0.55], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ — ჭერის შუქს ადგომის გარეშე ჩააქრობთ.' },
+      { id: 'ჩ5', room: 'საძინებელი 1', p: [4.925, 2.47], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'საწოლის მეორე მხარეს; მესამე ღილაკი ღამის ბილიკს რთავს.' },
       { id: 'ჩ6', room: 'საძინებელი 2', p: [2.27, 7.01], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-      { id: 'ჩ7', room: 'საძინებელი 2', p: [0.39, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-      { id: 'ჩ8', room: 'საძინებელი 2', p: [2.42, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ7', room: 'საძინებელი 2', p: [0.56, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ8', room: 'საძინებელი 2', p: [2.49, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
       { id: 'ჩ9', room: 'სააბაზანო', p: [3.335, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში. გამწოვი ტენიანობის სენსორით მუშაობს.' },
       { id: 'ჩ10', room: 'სამზარეულო', p: [4.925, 4.88], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'კედელში ყუთი არ სჭირდება — შეეხეთ თაროს პროფილის ბოლოს.' },
     ],
     sockets: [
       { p: [1.2, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
-      { p: [0.2, 5.1], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
+      { p: [0.2, 5.4], n: 'E', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
       { p: [3.25, 4.78], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
       { p: [4.925, 5.5], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
       { p: [4.925, 6.15], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
       { p: [4.925, 4.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
-      { p: [4.925, 0.36], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-      { p: [4.925, 2.34], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [4.925, 0.55], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [4.925, 2.47], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
       { p: [2.5, 0.2], n: 'S', h: 0.3, kind: 'სამუშაო მაგიდასთან ორმაგი + ინტერნეტი', room: 'საძინებელი 1' },
-      { p: [0.39, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-      { p: [2.42, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [0.56, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [2.49, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
       { p: [3.35, 7.95], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
       { p: [3.35, 8.45], n: 'E', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
     ],
@@ -652,8 +653,8 @@ function defineProject() {
     entryPt: [5.85, 0.8],
     cove: [[5.8, 3.2, 9.73, 3.2], [9.73, 3.2, 9.73, 6.84], [6.6, 6.84, 9.73, 6.84]],
     beds: [
-      { r: [7.7, 0.68, 9.8, 2.28], head: 'E', room: 'bed1', ns: [[9.42, 0.22, 9.8, 0.62], [9.42, 2.34, 9.8, 2.74]], read: 'globe' },
-      { r: [7.65, 7.75, 9.25, 9.85], head: 'S', room: 'bed2', ns: [[7.28, 9.45, 7.6, 9.85], [9.3, 9.45, 9.7, 9.85]], read: 'sconce' },
+      { r: [7.7, 0.8, 9.8, 2.4], head: 'E', room: 'bed1', ns: [[9.42, 0.42, 9.8, 0.78], [9.42, 2.44, 9.8, 2.84]], read: 'globe' },
+      { r: [7.65, 7.75, 9.25, 9.85], head: 'S', room: 'bed2', ns: [[7.28, 9.45, 7.6, 9.85], [9.27, 9.45, 9.57, 9.85]], read: 'sconce' },
     ],
     wardrobes: [{ r: [6.69, 1.3, 7.29, 3.03], face: 'E' }, { r: [6.66, 8.0, 7.26, 9.85], face: 'E' }],
     storage: { r: [5.075, 1.1, 5.475, 2.7], face: 'E' },
@@ -664,7 +665,7 @@ function defineProject() {
     bath: {
       vanity: { r: [6.11, 7.2, 6.56, 7.8], face: 'W', mirror: [7.22, 7.78] }, washer: { r: [5.96, 8.0, 6.56, 8.6], face: 'W' },
       toilet: { ledge: [5.075, 7.05, 5.255, 7.8], bowl: [5.255, 7.23, 5.73, 7.61] },
-      shower: { r: [5.075, 8.9, 6.56, 9.85], glass: [[5.7, 8.9], [6.56, 8.9]], head: [5.4, 9.4], niche: { ax: 'x', z: 9.845, a0: 5.25, a1: 5.95 } },
+      shower: { r: [5.075, 8.9, 6.56, 9.85], glass: [[5.7, 8.9], [6.56, 8.9]], head: [5.4, 9.4], niche: { ax: 'x', z: 9.845, a0: 5.6, a1: 6.3 } },
     },
     lamp: { base: [7.15, 6.7], shade: [8.15, 1.7, 6.2] },
     rugs: [[7.6, 4.0, 9.5, 5.95], [7.4, 0.45, 9.6, 2.5], [7.2, 7.45, 9.6, 9.45]],
@@ -673,26 +674,26 @@ function defineProject() {
       { id: 'ჩ1', room: 'შესასვლელი', p: [6.33, 0.2], n: 'S', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: 'შესასვლელი კარის სახელურის მხარეს, ჩარჩოდან ≈18 სმ-ში. ქვედა ღილაკი ყველა სანათს თიშავს.' },
       { id: 'ჩ2', room: 'მისაღები', p: [6.8, 3.13], n: 'S', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'დერეფნიდან მისაღებში შესვლისას, მარჯვნივ.' },
       { id: 'ჩ3', room: 'საძინებელი 1', p: [6.69, 1.23], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-      { id: 'ჩ4', room: 'საძინებელი 1', p: [9.8, 0.42], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
-      { id: 'ჩ5', room: 'საძინებელი 1', p: [9.8, 2.54], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
+      { id: 'ჩ4', room: 'საძინებელი 1', p: [9.8, 0.6], n: 'W', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
+      { id: 'ჩ5', room: 'საძინებელი 1', p: [9.8, 2.64], n: 'W', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
       { id: 'ჩ6', room: 'საძინებელი 2', p: [6.66, 7.2], n: 'E', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
       { id: 'ჩ7', room: 'საძინებელი 2', p: [7.44, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-      { id: 'ჩ8', room: 'საძინებელი 2', p: [9.5, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+      { id: 'ჩ8', room: 'საძინებელი 2', p: [9.42, 9.85], n: 'N', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
       { id: 'ჩ9', room: 'სააბაზანო', p: [6.61, 6.91], n: 'N', h: 1.05, kind: '2-კლავიშიანი, სააბაზანოს გარეთ', ctl: ['bath', 'mirror'], note: 'სააბაზანოს კარის სახელურის მხარეს, მისაღებში.' },
       { id: 'ჩ10', room: 'სამზარეულო', p: [5.075, 4.88], n: 'E', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
     ],
     sockets: [
       { p: [8.75, 3.13], n: 'S', h: 1.15, kind: 'ტელევიზორი: 2 × დენი, HDMI არხი, ინტერნეტი', room: 'მისაღები' },
-      { p: [9.8, 5.1], n: 'W', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
+      { p: [9.8, 5.4], n: 'W', h: 0.3, kind: 'ორმაგი + USB-C დივანთან', room: 'მისაღები' },
       { p: [6.85, 4.82], n: 'U', h: 0, kind: 'იატაკის როზეტი მაგიდის ქვეშ', room: 'მისაღები' },
       { p: [5.075, 5.5], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
       { p: [5.075, 6.15], n: 'E', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
       { p: [5.075, 4.5], n: 'E', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
       { p: [5.075, 0.7], n: 'E', h: 0.3, kind: 'რობოტ-მტვერსასრუტის ბაზა', room: 'შესასვლელი' },
-      { p: [9.8, 0.42], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-      { p: [9.8, 2.54], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [9.8, 0.6], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+      { p: [9.8, 2.64], n: 'W', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
       { p: [7.44, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-      { p: [9.5, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+      { p: [9.42, 9.85], n: 'N', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
       { p: [6.56, 7.95], n: 'W', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
       { p: [6.56, 8.45], n: 'W', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
     ],
@@ -708,11 +709,11 @@ function defineProject() {
       entryPt: f === 2 ? [3.1, 9.3] : [3.6, 9.35],
       cove: [[0.27, 4.05, 0.27, 9.78], [0.27, 4.05, 3.28, 4.05], [3.28, 4.05, 3.28, 6.97], [3.28, 6.97, 3.98, 6.97], [0.27, 9.78, 3.98, 9.78]],
       beds: [
-        { r: [0.6, 0.2, 2.0, 2.3], head: 'N', room: 'bed1', ns: [[0.22, 0.2, 0.55, 0.5], [2.05, 0.2, 2.38, 0.5]], read: 'globe', hb: 0.85, art: false },
-        { r: [2.91, 0.2, 4.51, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.86, 0.5], [4.56, 0.2, 4.9, 0.5]], read: 'sconce', hb: 0.85, art: false },
+        { r: [0.7, 0.2, 2.1, 2.3], head: 'N', room: 'bed1', ns: [[0.4, 0.2, 0.69, 0.5], [2.11, 0.2, 2.39, 0.5]], read: 'globe', hb: 0.85, art: false },
+        { r: [2.86, 0.2, 4.46, 2.3], head: 'N', room: 'bed2', ns: [[2.52, 0.2, 2.84, 0.5], [4.48, 0.2, 4.78, 0.5]], read: 'sconce', hb: 0.85, art: false },
       ],
       wardrobes: [{ r: [1.85, 2.55, 2.4, 3.88], face: 'W' }, { r: [4.325, 2.55, 4.925, 3.88], face: 'W' }],
-      sofa: [{ r: [0.2, 4.3, 1.1, 5.85], backs: ['W'], arms: ['N'] }, { r: [0.2, 5.85, 1.75, 6.75], backs: ['W'], arms: ['S'] }],
+      sofa: [{ r: [0.4, 4.3, 1.3, 5.85], backs: ['W'], arms: ['N'] }, { r: [0.4, 5.85, 1.95, 6.75], backs: ['W'], arms: ['S'] }], // 0.2 m off the wall: column at z 4.83–5.23
       tv: { face: 'W', wall: 3.35, a0: 4.6, a1: 5.7, panel: [4.3, 5.95] },
       dining: { r: [0.55, 8.35, 1.95, 9.2], chairs: [[0.9, 8.22, 'S'], [1.6, 8.22, 'S'], [0.9, 9.33, 'N'], [1.6, 9.33, 'N']] },
       kitchen: { r: [3.45, 7.0, 4.05, 8.8], face: 'W', fridge: [8.2, 8.8], hob: 7.3, sink: 7.92 },
@@ -721,18 +722,18 @@ function defineProject() {
         toilet: { ledge: [4.745, 6.0, 4.925, 6.75], bowl: [4.27, 6.18, 4.745, 6.56] },
         shower: { r: [4.05, 3.98, 4.925, 5.25], glass: [[4.05, 3.98], [4.05, 4.9]], head: [4.5, 4.6], niche: { ax: 'x', z: 3.985, a0: 4.2, a1: 4.8 } },
       },
-      lamp: { base: [2.0, 6.95], shade: [1.1, 1.7, 5.95] },
-      rugs: [[1.25, 4.4, 2.95, 6.6], [0.45, 1.2, 1.8, 2.8], [2.7, 1.2, 4.25, 2.8]],
+      lamp: { base: [2.0, 6.95], shade: [1.3, 1.7, 5.95] },
+      rugs: [[1.45, 4.4, 3.15, 6.6], [0.55, 1.2, 1.9, 2.8], [2.65, 1.2, 4.2, 2.8]],
       plants: [[0.4, 7.15]],
       switches: [
         { id: 'ჩ1', room: 'შესასვლელი', p: f === 2 ? [2.47, 9.85] : [3.87, 9.85], n: 'N', h: 1.05, kind: 'ჭკვიანი სცენების პანელი, 4 ღილაკი', ctl: ['entry', 'track', 'cove'], note: f === 2 ? 'შესასვლელი კარის სახელურის მხარეს. ქვედა ღილაკი გასვლისას ყველა სანათს თიშავს.' : 'კიბის უჯრედიდან შემოსასვლელი კარის სახელურის მხარეს, მის გვერდით კედელზე.' },
         { id: 'ჩ2', room: 'მისაღები', p: [3.35, 4.12], n: 'W', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['track', 'dining'], note: 'საძინებლების კარებთან, სააბაზანოს კედელზე — დასაძინებლად წასვლისას მისაღებს აქედან ჩააქრობთ.' },
         { id: 'ჩ3', room: 'საძინებელი 1', p: [0.82, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed1'], note: 'ოთახში, კარის სახელურის მხარეს.' },
-        { id: 'ჩ4', room: 'საძინებელი 1', p: [0.385, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
-        { id: 'ჩ5', room: 'საძინებელი 1', p: [2.215, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
+        { id: 'ჩ4', room: 'საძინებელი 1', p: [0.55, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 2-კლავიშიანი', ctl: ['bed1', 'bed1read'], note: 'ტუმბოს ზემოთ.' },
+        { id: 'ჩ5', room: 'საძინებელი 1', p: [2.25, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან, 3-კლავიშიანი', ctl: ['bed1', 'bed1read', 'night'], note: 'მესამე ღილაკი ღამის ბილიკს რთავს.' },
         { id: 'ჩ6', room: 'საძინებელი 2', p: [3.48, 3.88], n: 'N', h: 1.05, kind: '2-კლავიშიანი, ორი ადგილიდან მართვა', ctl: ['bed2', 'night'], note: 'ოთახში, კარის სახელურის მხარეს.' },
         { id: 'ჩ7', room: 'საძინებელი 2', p: [2.69, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარცხენა საკითხავი სანათის ქვეშ.' },
-        { id: 'ჩ8', room: 'საძინებელი 2', p: [4.73, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
+        { id: 'ჩ8', room: 'საძინებელი 2', p: [4.63, 0.2], n: 'S', h: 0.8, kind: 'საწოლთან', ctl: ['bed2', 'bed2read'], note: 'მარჯვენა საკითხავი სანათის ქვეშ.' },
         { id: 'ჩ9', room: 'სააბაზანო', p: [3.45, 5.87], n: 'E', h: 1.05, kind: '2-კლავიშიანი, IP44', ctl: ['bath', 'mirror'], note: 'შიგნით, კარის სახელურის მხარეს, საშხაპიდან 0,6 მ-ზე შორს — 1-ლი და მე-2 ზონის გარეთ.' },
         { id: 'ჩ10', room: 'სამზარეულო', p: [4.05, 8.12], n: 'W', h: 1.47, kind: 'სენსორული ჩამქრობი LED პროფილში', ctl: ['kitchen'], note: 'შეეხეთ თაროს პროფილის ბოლოს.' },
       ],
@@ -742,10 +743,10 @@ function defineProject() {
         { p: [0.2, 8.0], n: 'E', h: 0.3, kind: 'ორმაგი სასადილო მაგიდასთან', room: 'მისაღები' },
         { p: [4.05, 7.63], n: 'W', h: 1.15, kind: 'ორმაგი სამუშაო ზედაპირის ზემოთ', room: 'სამზარეულო' },
         { p: [4.05, 8.5], n: 'W', h: 0.3, kind: 'მაცივარი (უკან, დამალული)', room: 'სამზარეულო' },
-        { p: [0.385, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
-        { p: [2.215, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+        { p: [0.55, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
+        { p: [2.25, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 1' },
         { p: [2.69, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
-        { p: [4.73, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
+        { p: [4.63, 0.2], n: 'S', h: 0.55, kind: 'საწოლთან ორმაგი + USB-C', room: 'საძინებელი 2' },
         { p: [3.45, 5.45], n: 'E', h: 1.25, kind: 'საპარსის როზეტი (გამყოფი ტრანსფორმატორით)', room: 'სააბაზანო' },
         { p: [3.75, 3.98], n: 'S', h: 1.15, kind: 'IP44 სარეცხი მანქანისთვის, ცალკე 30 mA დიფ. ავტომატით', room: 'სააბაზანო' },
       ],
@@ -765,12 +766,12 @@ function defineProject() {
 
   const sideOf = id => apartments[id].side;
   return {
-    key: 'dolabauri', name: 'დოლაბაური', eyebrow: 'საცხოვრებელი სახლი · 4 სართული · 8 ბინა',
+    key: 'dolabauri', name: 'დოლაბაური', frameColor: '#f4f4f1', eyebrow: 'საცხოვრებელი სახლი · 4 სართული · 8 ბინა',
     floorH: 3.0, H: 2.8, sill: 0.9, head: 2.2, floors: [1, 2, 3, 4], footprint: { x0: 0, z0: 0, x1: 10, z1: 10.05 }, cornice: true,
     floorData: { 1: floor1(), 2: floorUp(2), 3: floorUp(3), 4: floorUp(4) }, apartments, defaultFocus: '3', stageFurniture: true,
     slabs: f => f >= 3 ? [[0, 0, 10, 6.95], [0, 6.95, 4.15, 10.05], [5.85, 6.95, 10, 10.05], [4.15, 8.89, 5.85, 10.05]] : [[0, 0, 10, 10.05]], // stair well open above floor 2
     finishes: f => dolabFinishes(f), floorExtras: (f, F) => dolabFloorExtras(f, F), hallBelowVisible: (f, F) => F >= 3 && f === F - 1,
-    extras() { dolabStair(); dolabRoof(); dolabSite(); }, mep: () => dolabMEP(), smartHide: [],
+    extras() { dolabStair(); dolabRoof(); dolabSite(); dolabColumns(); }, mep: () => dolabMEP(), smartHide: [],
     extLights: [
   { c: 'ext', t: 'spot', p: [3.1, 5.4, 10.6], tg: [3.1, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
   { c: 'ext', t: 'spot', p: [4.65, 5.4, 10.6], tg: [4.65, 3.0, 10.7], angle: 0.9, power: 10, dist: 5, shadow: 1 },
@@ -884,22 +885,7 @@ function dolabSite() {
   const tree = (x, z, y0, s) => { const tg = new THREE.Group(); SITE.add(tg); cyl(tg, SH.trunk, x, y0, z, 0.09 * s, 2.0 * s, { seg: 8 }); const R2 = rng(Math.floor((x + 50) * 10 + z)); for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), R2() < .5 ? SH.leaf : SH.leaf2); m.position.set(x + (R2() - .5) * 1.6 * s, y0 + (2.2 + R2() * 1.4) * s, z + (R2() - .5) * 1.6 * s); m.scale.setScalar((0.6 + R2() * 0.5) * s); m.castShadow = true; tg.add(m); } SITE_TREES.push({ x, z, y0: y0, s, g: tg }); };
   tree(-6, -5, -0.06, 1.2); tree(2.5, -7, -0.06, 1.0); tree(-7.5, 3, -0.06, 1.1); tree(-9, 12, 2.98, 1.0); tree(14, -6, -0.06, 0.9);
   // neighbour house, 0.2 m east (blank wall towards us)
-  // ---- modern facade details: wood fins on solid piers (floors 2-4, south + west), planters, name sign on the canopy
-  const wood = new THREE.MeshStandardMaterial({ color: '#a8754c', roughness: 0.62, map: TEX.plank });
-  // one instanced batch per wall, in that floor's wall group and the wall's cutaway list, so fins hide with their wall
-  const finGeo = new THREE.BoxGeometry(1, 1, 1), mx = new THREE.Matrix4(), q0 = new THREE.Quaternion();
-  for (const rec of wallRecs) {
-    const w = rec.w; if (rec.f < 2 || !w.ext || !(w.ext[1] === 1 || w.ext[0] === -1)) continue;
-    const n = w.h ? w.ext[1] : w.ext[0], off = w.c + n * (w.t / 2) + n * 0.05, at = [];
-    for (const [a0, a1, y0, y1] of wallPieces(w)) {
-      if (y0 > 0.01 || y1 < H - 0.01 || a1 - a0 < 1.0) continue; // only the wider solid wall: the 0.4–0.6 m piers between the 1.2 m windows stay plain
-      for (let a = a0 + 0.03; a < a1 - 0.03; a += 0.085) at.push(a);
-    }
-    if (!at.length) continue;
-    const inst = new THREE.InstancedMesh(finGeo, wood, at.length), scl = w.h ? new THREE.Vector3(0.045, FH, 0.07) : new THREE.Vector3(0.07, FH, 0.045);
-    at.forEach((a, i) => { mx.compose(w.h ? new THREE.Vector3(a, FH / 2 - 0.1, off) : new THREE.Vector3(off, FH / 2 - 0.1, a), q0, scl); inst.setMatrixAt(i, mx); });
-    inst.castShadow = true; inst.receiveShadow = true; FLOOR[rec.f].walls.add(inst); rec.win.push(inst);
-  }
+  // ---- facade details: planters and the name sign on the canopy (the timber now clads the columns, see dolabColumns)
   for (const [x0, x1] of [[0.2, 2.3], [7.7, 9.8]]) {
     box(SITE, SH.winFrame, [x0, 10.55, x1, 11.15], 2.98, 3.5);
     const R3 = rng(Math.floor(x0 * 100));
@@ -921,6 +907,59 @@ function dolabSite() {
 }
 
 
+/* ---------- structure: 9 columns (Giorgi: 8 on the outside, 1 in the centre), 40 × 40 cm ----------
+   Corners, the middle of each side and the centre of the plan. The south-middle one sits 0.25 m east of the axis
+   so it clears the stair hall's street door. Outer faces stand 5 cm proud of the facade so they read as one line
+   past the slab bands. Finish: dark grey paint or the timber-look slatted facade panel (switch in the project tab). */
+const COLUMNS = [[0, 0], [4.8, 0], [9.6, 0], [0, 4.825], [4.8, 4.825], [9.6, 4.825], [0, 9.65], [5.05, 9.65], [9.6, 9.65]];
+const COLFIN = { key: 'wood', meshes: [] };
+function slatTex() {
+  // vertical slats ≈ 29 mm with dark 6 mm grooves, walnut tone; one tile = 0.40 × 0.80 m
+  const PX = 640, W = 0.4 * PX, Hh = 0.8 * PX, N = 14, sw = W / N; const [c, g] = makeCanvas(W, Hh); const R = rng(4242);
+  g.fillStyle = '#24160d'; g.fillRect(0, 0, W, Hh);
+  for (let i = 0; i < N; i++) {
+    const x = i * sw + 2, w = sw - 4, l = 30 + R() * 9, h = 24 + R() * 6;
+    const grd = g.createLinearGradient(x, 0, x + w, 0); grd.addColorStop(0, `hsl(${h},48%,${l - 6}%)`); grd.addColorStop(0.5, `hsl(${h},50%,${l + 3}%)`); grd.addColorStop(1, `hsl(${h},48%,${l - 8}%)`);
+    g.fillStyle = grd; g.fillRect(x, 0, w, Hh);
+    for (let k = 0; k < 26; k++) { const gx = x + 1 + R() * (w - 2); g.strokeStyle = `rgba(${R() < 0.6 ? '30,15,5' : '255,220,180'},${0.05 + R() * 0.1})`; g.lineWidth = 0.6 + R() * 1.2; g.beginPath(); g.moveTo(gx, 0); for (let y = 0; y <= Hh; y += 32) g.lineTo(gx + Math.sin(y * 0.02 + k) * 1.2, y); g.stroke(); }
+  }
+  const t = toTex(c); t.repeat.set(1 / 0.4, 1 / 0.8); return t;
+}
+const COLMAT = {}; // created in dolabColumns(): this file is evaluated before the engine's materials exist
+function setColumnFinish(k) {
+  COLFIN.key = k;
+  for (const m of COLFIN.meshes) { const mats = m.material.slice(); m.userData.outFaces.forEach(i => { mats[i] = COLMAT[k]; }); m.material = mats; m.userData.mats = mats; }
+  document.querySelectorAll('[data-colfin]').forEach(b => b.classList.toggle('on', b.dataset.colfin === k)); invalidate();
+}
+function dolabColumns() {
+  COLMAT.grey = std('#43474b', 0.82); COLMAT.wood = std('#ffffff', 0.6, 0, { map: slatTex() });
+  const S = 0.4, P = 0.05, rect = ([x, z]) => [x - (x <= 0 ? P : 0), z - (z <= 0 ? P : 0), x + S + (x + S >= FP.x1 ? P : 0), z + S + (z + S >= FP.z1 ? P : 0)];
+  const outside = ([x, z]) => x <= 0 || z <= 0 || x + S >= FP.x1 || z + S >= FP.z1;
+  // per-face materials: the finish only outside; inside a face takes the wall of the flat (or hall) it faces
+  const faceMats = (r, f) => {
+    const cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2, probes = [[r[2] + 0.1, cz], [r[0] - 0.1, cz], null, null, [cx, r[3] + 0.1], [cx, r[1] - 0.1]], out = [];
+    const mats = probes.map((p, i) => {
+      if (!p) return SH.wallTop;
+      if (p[0] < FP.x0 || p[0] > FP.x1 || p[1] < FP.z0 || p[1] > FP.z1) { out.push(i); return COLMAT[COLFIN.key]; }
+      const id = f === 'roof' ? null : IDS.find(id => APT[id].floor === f && APT[id].rooms.some(rm => p[0] >= rm.r[0] - 0.15 && p[0] <= rm.r[2] + 0.15 && p[1] >= rm.r[1] - 0.15 && p[1] <= rm.r[3] + 0.15));
+      return f === 'roof' ? SH.facade : id ? MATS[id].wall : SH.hallWall;
+    });
+    return { mats, out };
+  };
+  for (const c of COLUMNS) {
+    const r = rect(c), out = outside(c);
+    for (const f of [...PROJECT.floors, 'roof']) {
+      const fm = faceMats(r, f), m = f === 'roof' ? box(ROOF, fm.mats, r, -0.2, out ? 0.66 : 0) : box(FLOOR[f].walls, fm.mats, r, -0.2, H);
+      m.userData.outFaces = fm.out; m.userData.mats = fm.mats; COLFIN.meshes.push(m);
+      if (f === 'roof') continue;
+      collide[f].push(r);
+      // outside columns hide with the wall they stand in when the cutaway lowers that wall
+      if (out) { const cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2; const rec = wallRecs.find(q => q.f === f && q.w.ext && (q.w.h ? Math.abs(cz - q.w.c) < 0.35 && cx > q.w.from - 0.3 && cx < q.w.to + 0.3 : Math.abs(cx - q.w.c) < 0.35 && cz > q.w.from - 0.3 && cz < q.w.to + 0.3)); if (rec) rec.win.push(m); }
+    }
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest?.('[data-colfin]'); if (b) setColumnFinish(b.dataset.colfin); });
+}
+
 function dolabMEP() {
   const riser = (x, z, r, mat) => { const m = cyl(root, mat, x, 0, z, r, TOP * FH + 1.1, { cast: false }); m.userData.mep = true; mepObjs.push(m); };
   riser(5.0, 6.6, 0.055, SH.pipeDrain); riser(4.86, 6.4, 0.016, SH.pipeCold); riser(5.14, 6.4, 0.016, SH.pipeHot);
@@ -939,9 +978,11 @@ function dolabProjectTab() {
   const rows = IDS.map(id => { const a = APT[id]; return `<tr class="click" data-id="${id}"><td><b>ბინა ${id}</b></td><td class="num">${a.floor}</td><td class="num">${fmt(a.area)} მ²</td><td>${a.orient.join(', ')}</td><td>${a.entry}</td></tr>`; }).join('');
   return `<h2>დოლაბაური</h2><p>ოთხსართულიანი სახლი, თითო სართულზე ორი ბინა, თითოეულში ორი საძინებელი. შესასვლელები უცვლელია; ავეჯი და დეტალები გავაუმჯობესე, რადგან სახლი ახლა შენდება.</p>
   <table class="tbl"><thead><tr><th>ბინა</th><th>სართ.</th><th>ფართი</th><th>ფანჯრები</th><th>შესასვლელი</th></tr></thead><tbody>${rows}</tbody></table>
+  <h3>კოლონები</h3><p>9 კოლონა (40 × 40 სმ): 4 კუთხეში, 4 კედლების შუაში და 1 ცენტრში. მოპირკეთება:</p>
+  <div class="chips" style="margin:6px 0 14px"><button class="${COLFIN.key === 'wood' ? 'on' : ''}" data-colfin="wood">ხის ფასადის პანელი</button><button class="${COLFIN.key === 'grey' ? 'on' : ''}" data-colfin="grey">მუქი ნაცრისფერი</button></div>
   <h3>რა გავაუმჯობესე</h3>
   <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. რვავე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–4-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
-  <div class="change"><b>ფანჯრები 120 × 180, გვერდიგვერდ, აგური ქვეშ</b>ყველა ფანჯარა ერთნაირია: 120 სმ სიგანე, 180 სმ სიმაღლე, რაფა 90 სმ-ზე. ფანჯრები ერთმანეთზე გვერდიგვერდაა მიდგმული — ყოველ ოთახში გარე კედელზე იმდენი, რამდენიც ეტევა. კედელი რჩება მხოლოდ შენობის კუთხეებში (30 სმ), შიდა ტიხრებთან (10 სმ), კარებთან და პირველი სართულის გარდერობთან. ფანჯრების ქვეშ კედელი გარედან აგურისაა. მეზობლის (აღმოსავლეთის) კედელსა და პირველი სართულის მიწაში ჩაფლულ სამხრეთ კედელზე ახალი ფანჯარა არ არის. სართ. 2–4-ის საძინებლებში საწოლი ფანჯრის ქვეშაა, ამიტომ საწოლის თავი 85 სმ-მდე დავადაბლე.</div>
+  <div class="change"><b>ფანჯრები 120 × 180, გვერდიგვერდ, ქვეშ ყრუ ფანჯარა</b>ყველა ფანჯარა 120 სმ სიგანისა და 180 სმ სიმაღლისაა, რაფა 90 სმ-ზე; ქვეშ, იატაკიდან რაფამდე, იმავე თეთრ ჩარჩოში ყრუ (გაუმჭვირვალე) მინაა. ფანჯრები გვერდიგვერდაა, ყოველ ოთახში იმდენი, რამდენიც ეტევა. კედელი რჩება მხოლოდ კოლონებთან, შიდა ტიხრებთან (10 სმ), კარებთან და პირველი სართულის გარდერობთან. მეზობლის (აღმოსავლეთის) კედელზე პირველ სართულზე გეგმის ღიობები კოლონის გამო ცოტა გადავწიე, რაოდენობა იგივეა. კიბის უჯრედს სართ. 3–4-ზე ფანჯარა აღარ აქვს — სამხრეთის შუა კოლონის გვერდით 120 სმ არ ეტევა.</div>
   <div class="change"><b>მე-4 სართული და ახალი კიბე</b>დაემატა მე-4 სართული — ბინები 7 და 8, ზუსტად ისეთივე გეგმით, როგორიც მე-3 სართულს აქვს. ძველი მოხვეული კიბე მხოლოდ მაშინ გამოდგებოდა, როცა მე-3 სართული ბოლო იყო: მე-3 სართულიდან ზემოთ ასასვლელი მარში ბინა 5-ის კარის წინ დაიწყებოდა. ამიტომ ≈1,7 × 2,9 მ კიბის უჯრედში ახლა ხრახნული (სპირალური) კიბეა: ≈1,7 × 1,9 მ კიბეს უჭირავს, ≈1 მ — მოედანს. თითო სართულზე კიბე ერთ სრულ ბრუნს აკეთებს, 17 საფეხურით, თითო 176 მმ სიმაღლის. ყოველი ბრუნი წინას თავზე მეორდება, ამიტომ მე-3 და მე-4 სართულის მოედანზე ორივე ბინის კარი შეუფერხებლად იღება, საფეხურების ზემოთ კი თავისუფალი სიმაღლე ≈2,8 მ-ია. მოედნის კიდეზე, კიბის ორივე ბოლოში, მინის მოაჯირია.</div>
   <div class="change"><b>საძინებელი 2-ის კარი (სართ. 2–4)</b>გეგმაზე კარი სააბაზანოს კედელს კვეთდა — გადავიტანე დასავლეთით, 0,75 მ.</div>
   <div class="change"><b>ტელევიზორი ფანჯრის წინ აღარ არის (სართ. 3–4)</b>მისაღების განლაგება სართ. 2-ის მსგავსია: დივანი ფანჯარასთან, ტელევიზორი სააბაზანოს კედელზე, მაგიდა სამზარეულოსთან.</div>
@@ -953,7 +994,7 @@ function dolabProjectTab() {
   <div class="issue"><b>კიბე 4 სართულისთვის — ნორმებთან შესამოწმებელი</b>სპირალური კიბე პატარა უჯრედში ეტევა, მაგრამ 4-სართულიან საცხოვრებელ სახლში საერთო (საევაკუაციო) კიბისთვის ნორმები ხშირად სწორ მარშებს ითხოვს — ამას ≈2,4 × 4,5 მ უჯრედი სჭირდება. მშენებლობამდე არქიტექტორთან და ხანძარსაწინააღმდეგო ნორმებთან გადაამოწმეთ; ასევე — სჭირდება თუ არა ლიფტი.</div>
   <div class="issue"><b>სააბაზანოებს ფანჯარა არ აქვს</b>რვავე სააბაზანოს მექანიკური გამწოვი სჭირდება შახტაში (ტენიანობის სენსორით, 10 წთ დაყოვნებით) და კარის ქვეშ 1 სმ ღრიჭო. საშხაპეებს — ჰიდროიზოლაცია და იატაკის დახრა ტრაპისკენ.</div>
   <div class="issue"><b>ბინებს შორის კედელი</b>ხმის იზოლაცია ≥52 დბ: ორმაგი წყობა ან ბლოკი + იზოლაციის ფენა, განსაკუთრებით პირველ სართულზე, სადაც სამზარეულოები ზურგით ერთმანეთზეა.</div>
-  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, გეგმის ზედა მხარე — ჩრდილოეთი. ყველა ფანჯარა 120 × 180 სმ-ია (რაფა იატაკიდან 90 სმ-ზე, ზედა ნაწილი 270 სმ-ზე), ფანჯრის ქვეშ კედელი გარედან აგურითაა ამოყვანილი. ფანჯრები გვერდიგვერდ, მაქსიმალური რაოდენობით; აღმოსავლეთის (მეზობლის) კედელზე ახალი ფანჯარა არ არის. მე-4 სართული მე-3-ის ზუსტი ასლია.</p>
+  <h3>დაშვებები</h3><p class="muted">სართულის სიმაღლე 3,0 მ, ჭერი 2,8 მ, გეგმის ზედა მხარე — ჩრდილოეთი. ყველა ფანჯარა 120 × 180 სმ-ია (რაფა 90 სმ-ზე, ზედა ნაწილი 270 სმ-ზე), ქვეშ ყრუ ფანჯრით, თეთრი ჩარჩოებით. კოლონების ზუსტი ადგილი გეგმაზე არ ჩანდა — დავსვი კუთხეებში, კედლების შუაში და ცენტრში; სამხრეთის შუა კოლონა 25 სმ-ით აღმოსავლეთით, რომ კიბის უჯრედის შესასვლელს არ ეჯახებოდეს. მე-4 სართული მე-3-ის ზუსტი ასლია.</p>
   <h3>როგორ აჩვენებენ დეველოპერები</h3><ul class="checklist"><li>შენობის ხედი და ბინის არჩევა ფასადზე (აქ — მიიტანეთ კურსორი ბინაზე)</li><li>„სათამაშო სახლის“ ხედი მოჭრილი კედლებით</li><li>გეგმა ოთახებითა და ფართებით</li><li>შიგნით სეირნობა</li><li>მოპირკეთების პაკეტები</li><li>დღის დრო და განათების სცენები</li><li>ელექტრო და ინჟინერიის ფენები</li><li>გაზომვა</li><li class="no">ფასები და ხელმისაწვდომობა (თქვენი მონაცემები სჭირდება)</li></ul>`;
 }
 
@@ -1196,7 +1237,7 @@ const SH = {
   ao: new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: TEX.ao, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
   blob: new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: TEX.blob, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }),
   book1: std('#8b6f4e', 0.8), book2: std('#3d4a52', 0.8), book3: std('#c9b79c', 0.8), wire: std('#151515', 0.6, 0.2),
-  facade: std('#ece8e1', 0.92, 0, { map: TEX.render }), brick: std('#ffffff', 0.88, 0, { map: TEX.brick }), stone: std('#d9cfc0', 0.9, 0, { map: TEX.stone }), band: std('#c9c3b9', 0.85), winFrame: std('#2b2d30', 0.45, 0.4),
+  facade: std('#ece8e1', 0.92, 0, { map: TEX.render }), brick: std('#ffffff', 0.88, 0, { map: TEX.brick }), sash: std(PROJECT.frameColor ?? '#2b2d30', 0.4, PROJECT.frameColor ? 0.05 : 0.4), spandrel: std('#2c3237', 0.16, 0.35), stone: std('#d9cfc0', 0.9, 0, { map: TEX.stone }), band: std('#c9c3b9', 0.85), winFrame: std('#2b2d30', 0.45, 0.4),
   hallWall: std('#e7e3dc', 0.9), hallFloor: std('#c9c2b6', 0.5, 0, { map: TEX.hall }), stair: std('#d8d2c8', 0.55), stairEdge: std('#3a3b3d', 0.6, 0.3),
   slabTop: std('#9a958e', 0.95), ceiling: std('#f3f1ed', 0.95), wallTop: std('#2a2c2f', 1), roof: std('#8d8a85', 0.95), cap: std('#bdb7ae', 0.8),
   grass: std('#ffffff', 1, 0, { map: TEX.grass }), paving: std('#cfc8bc', 0.85, 0, { map: TEX.paving }), asphalt: std('#ffffff', 0.95, 0, { map: TEX.asphalt }), retain: std('#cfc5b6', 0.9, 0, { map: TEX.stone }),
@@ -1339,19 +1380,20 @@ function wallBox(parent, w, a0, a1, y0, y1) {
 }
 function windowParts(parent, w, s, e, sill, head, glassMat, flags = '') {
   const t = w.t, mid = w.c, g = new THREE.Group(); parent.add(g);
-  const fm = SH.winFrame, inSign = w.ext ? -(w.h ? w.ext[1] : w.ext[0]) : 1, F = 0.06, D = 0.07;
+  const fm = SH.sash, inSign = w.ext ? -(w.h ? w.ext[1] : w.ext[0]) : 1, F = 0.06, D = 0.07, spd = /\bspandrel\b/.test(flags), y0f = spd ? 0 : sill;
   const along2 = (a0, a1, y0, y1, p0, p1, mat, o) => box(g, mat, w.h ? [a0, Math.min(p0, p1), a1, Math.max(p0, p1)] : [Math.min(p0, p1), a0, Math.max(p0, p1), a1], y0, y1, o);
   const p0 = mid - D / 2, p1 = mid + D / 2, o = { cast: false };
-  along2(s, e, sill, sill + F, p0, p1, fm, o); along2(s, e, head - F, head, p0, p1, fm, o); along2(s, s + F, sill, head, p0, p1, fm, o); along2(e - F, e, sill, head, p0, p1, fm, o);
+  along2(s, e, sill, sill + F, p0, p1, fm, o); along2(s, e, head - F, head, p0, p1, fm, o); along2(s, s + F, y0f, head, p0, p1, fm, o); along2(e - F, e, y0f, head, p0, p1, fm, o);
+  if (spd) along2(s, e, 0, F, p0, p1, fm, o); // bottom rail of the blind panel
   // 'module': a ribbon of coupled 1.20 m windows — a wider mullion every 1.20 m so each window reads on its own
   const mod = /\bmodule\b/.test(flags), n = Math.max(1, Math.round((e - s) / (mod ? 1.2 : 1.35))), mw = mod ? 0.05 : 0.025;
-  for (let k = 1; k < n; k++) { const a = s + (k * (e - s)) / n; along2(a - mw, a + mw, sill, head, p0, p1, fm, o); }
+  for (let k = 1; k < n; k++) { const a = s + (k * (e - s)) / n; along2(a - mw, a + mw, y0f, head, p0, p1, fm, o); }
   const gl = along2(s + F, e - F, sill + F, head - F, mid - 0.004, mid + 0.004, glassMat, { cast: false, recv: false, uv: false }); gl.renderOrder = 3;
   const outer = mid - inSign * t / 2;
   if (sill > 0.1) {
     const si0 = inSign > 0 ? mid : mid - t / 2 - 0.04, si1 = inSign > 0 ? mid + t / 2 + 0.04 : mid;
     along2(s - 0.03, e + 0.03, sill - 0.03, sill, si0, si1, SH.cap, o);
-    along2(s - 0.02, e + 0.02, sill - 0.05, sill - 0.01, outer, outer - inSign * 0.05, SH.winFrame, o);
+    if (!spd) along2(s - 0.02, e + 0.02, sill - 0.05, sill - 0.01, outer, outer - inSign * 0.05, SH.winFrame, o);
   }
   if (flags.includes('frame')) {
     // projecting metal box surround
@@ -1377,9 +1419,18 @@ function buildWalls(f) {
     const brick = (w.open || []).filter(o => o[2] === 'win' && /\bbrick\b/.test(o[5] || '')).map(o => [o[0], o[1], o[3] ?? SILL]);
     const extI = w.pos === 'F' || w.pos === 'F1' ? (w.h ? 4 : 0) : w.neg === 'F' || w.neg === 'F1' ? (w.h ? 5 : 1) : -1;
     const brickFace = (m, a0, a1, y0, y1) => { if (extI < 0 || y0 > 0.02 || !brick.some(([s, e, sl]) => a0 >= s - 1e-3 && a1 <= e + 1e-3 && y1 <= sl + 1e-3)) return; const mats = m.material.slice(); mats[extI] = SH.brick; m.material = mats; };
+    // 'spandrel' windows (blind panel below the sill): the wall under the sill keeps only its inner half, so its outer
+    // face sits on the glass plane, and that face is opaque glass inside the window's own frame
+    const spd = (w.open || []).filter(o => o[2] === 'win' && /\bspandrel\b/.test(o[5] || '')).map(o => [o[0], o[1], o[3] ?? SILL]);
+    const nOut = w.pos === 'F' || w.pos === 'F1' ? 1 : w.neg === 'F' || w.neg === 'F1' ? -1 : 0;
+    const isSpd = (a0, a1, y0, y1) => nOut && y0 < 0.02 && spd.some(([s, e, sl]) => a0 >= s - 1e-3 && a1 <= e + 1e-3 && y1 <= sl + 1e-3);
+    const pieceBox = (parent, a0, a1, y0, y1) => {
+      if (!isSpd(a0, a1, y0, y1)) return wallBox(parent, w, a0, a1, y0, y1);
+      const r = wallBox(parent, { ...w, c: w.c - nOut * w.t / 4, t: w.t / 2 }, a0, a1, y0, y1), mats = r.m.material.slice(); mats[extI] = SH.spandrel; r.m.material = mats; return r;
+    };
     for (const [a0, a1, y0, y1] of wallPieces(w)) {
-      const { m, rect } = wallBox(full, w, a0, a1, y0, y1); brickFace(m, a0, a1, y0, y1); rec.meshes.push(m); m.userData.mats = m.material;
-      if (y0 < LOW) { const lm = wallBox(low, w, a0, a1, y0, Math.min(y1, LOW)).m; lm.castShadow = false; brickFace(lm, a0, a1, y0, Math.min(y1, LOW)); }
+      const { m, rect } = pieceBox(full, a0, a1, y0, y1); brickFace(m, a0, a1, y0, y1); rec.meshes.push(m); m.userData.mats = m.material;
+      if (y0 < LOW) { const lm = pieceBox(low, a0, a1, y0, Math.min(y1, LOW)).m; lm.castShadow = false; brickFace(lm, a0, a1, y0, Math.min(y1, LOW)); }
       if (y0 < 0.5) {
         collide[f].push(rect);
         const t = w.t, L = 0.22;
