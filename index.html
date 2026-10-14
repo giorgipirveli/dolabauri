@@ -968,20 +968,22 @@ function dolabColumns() {
    Illustrative, typical values for a 4-storey seismic frame (see STRSPEC); the real design is the structural
    engineer's. Built on first use. Concrete is drawn see-through so the cages read; walls, glass, furniture and
    the site are hidden while the layer is on. */
+// Values: typical practice checked against PN 01.01-09 (Georgian seismic code) and Eurocode 2/8 detailing rules.
 const STRSPEC = {
-  conc: 'B25 (C20/25)', concF: 'B25 W6 (C20/25)', lean: 'B7.5 (C8/10)', steel: 'A500C', stir: 'A240 / A500C',
-  col: { size: 0.4, n: 8, d: 0.020, sd: 0.010, sCrit: 0.10, sMid: 0.15, crit: 0.6, cover: 0.03 },
-  slab: { h: 0.2, d: 0.012, s: 0.2, cover: 0.025, colD: 0.016, colS: 0.1, colL: 1.6 },
-  beam: { n: 4, d: 0.016, sd: 0.008, s: 0.2 },
+  conc: 'B25 (C20/25)', concF: 'B25 W6 (C20/25)', lean: 'B7.5 (C8/10)', steel: 'A500C', stir: 'A500C, Ø8',
+  col: { size: 0.4, n: 8, d: 0.020, sd: 0.008, sCrit: 0.10, sMid: 0.15, crit: 0.5, cover: 0.03, lap: 1.0 },
+  slab: { h: 0.2, d: 0.012, s: 0.2, dT: 0.010, sT: 0.2, cover: 0.025, colD: 0.016, colS: 0.1, colL: 3.0, colW: 1.2 },
+  beam: { n: 4, d: 0.016, sd: 0.008, sNear: 0.1, s: 0.2, near: 0.8 },
   raft: { h: 0.5, d: 0.016, s: 0.2, cover: 0.05, lean: 0.1 },
-  wall: { t: 0.25, d: 0.012, s: 0.2 },
+  wall: { t: 0.25, dE: 0.014, sE: 0.15, d: 0.012, s: 0.2, dH: 0.010 },
+  shear: { t: 0.2, d: 0.012, s: 0.2, lap: 0.6 },
 };
 const STR = { built: false, groups: {}, labels: [] };
 function dolabStructureInit() {
   const css = document.createElement('style');
   css.textContent = '.stlab{pointer-events:none;background:rgba(36,28,22,.9);color:#f6efe6;font:500 10.5px/1.35 var(--f-body);padding:6px 8px;border-radius:8px;max-width:230px;box-shadow:0 2px 10px rgba(0,0,0,.35);border-left:3px solid #c0663a}.stlab b{display:block;font-weight:700;margin-bottom:2px}';
   document.head.appendChild(css);
-  const btn = document.createElement('button'); btn.dataset.layer = 'structure'; btn.textContent = 'კონსტრუქცია';
+  const btn = document.createElement('button'); btn.dataset.layer = 'structure'; btn.textContent = 'კონსტრუქცია (სქემა)';
   $('#layerToggles').appendChild(btn); btn.addEventListener('click', () => { if (!STR.built) dolabStructureBuild(); toggleLayer('structure'); });
   HOOKS.visibility.push(dolabStructureVisibility);
 }
@@ -992,7 +994,7 @@ function dolabStructureVisibility() {
     const G = FLOOR[f]; STR.groups[f].visible = on && (bld || f <= F);
     if (on) { G.walls.visible = false; G.doors.visible = false; G.fin.visible = false; G.slab.visible = false; }
   }
-  STR.groups.roof.visible = on;
+  STR.groups.roof.visible = on && bld; // like every other ceiling, the roof slab only shows in the building view
   if (on) for (const id of IDS) AG[id].root.visible = false;
   SITE.visible = !on; slabMeshes.roof.forEach(m => { m.visible = !on; });
   COLFIN.meshes.forEach(m => { if (m.parent === ROOF) m.visible = !on; }); // the clad column tops above the roof
@@ -1023,48 +1025,78 @@ function dolabStructureBuild() {
   // runs of a straight bar across slab pieces: axis 'x' (bar along x at fixed z) or 'z'
   const runs = (pieces, axis, c, lo = -1e9, hi = 1e9) => merge(pieces.filter(p => axis === 'x' ? c > p[1] && c < p[3] : c > p[0] && c < p[2]).map(p => axis === 'x' ? [p[0], p[2]] : [p[1], p[3]])).map(([a, b]) => [Math.max(a, lo), Math.min(b, hi)]).filter(([a, b]) => b - a > 0.1);
   const bar = (list, axis, c, y, a, b, d) => seg(list, axis === 'x' ? [a, y, c] : [c, y, a], axis === 'x' ? [b, y, c] : [c, y, b], d);
-  const SHAFT = [4.78, 6.3, 5.22, 6.9], GRIDX = [0.2, 5.0, 9.8], GRIDZ = [0.2, 5.025, 9.85];
+  const SHAFT = [4.78, 6.3, 5.22, 6.85], STAIR = [4.15, 6.95, 5.85, 8.89], GRIDZ = [0.2, 5.025, 9.85];
+  // north–south grid lines; the middle one kinks to the south-middle column, which sits 0.25 m east of the axis
+  const GRIDX = [[0.2, -1e9, 1e9], [5.0, -1e9, 5.225], [5.25, 4.825, 1e9], [9.8, -1e9, 1e9]];
   const COLC = COLUMNS.map(([x, z]) => [x, z, x + SP.col.size, z + SP.col.size]);
-  const label = (parent, floor, pos, title, text, bld = false) => { const el = document.createElement('div'); el.className = 'stlab'; el.innerHTML = `<b>${title}</b>${text}`; const o = new CSS2DObject(el); o.position.set(...pos); o.visible = false; parent.add(o); STR.labels.push({ obj: o, floor, bld }); };
+  const label = (parent, floor, pos, title, text, bld = false) => { const el = document.createElement('div'); el.className = 'stlab'; el.innerHTML = `<b>${title}</b>${text}<span style="display:block;margin-top:3px;opacity:.7">საილუსტრაციო მნიშვნელობები — არა სამშენებლო ნახაზი</span>`; const o = new CSS2DObject(el); o.position.set(...pos); o.visible = false; parent.add(o); STR.labels.push({ obj: o, floor, bld }); };
   // ---- a slab (floor f's floor, or the roof): concrete pieces + bottom/top meshes + hidden beams + column strips + trims
   const slab = (G, rects, holes) => {
-    let pieces = rects; for (const h of holes) pieces = pieces.flatMap(r => minus(r, h));
-    for (const r of pieces) solid(G, r, -SP.slab.h, 0);
-    const c = SP.slab.cover + SP.slab.d / 2, yb1 = -SP.slab.h + c, yb2 = yb1 + SP.slab.d, yt1 = -c, yt2 = yt1 - SP.slab.d, e = 0.03;
-    for (const [axis, yb, yt] of [['x', yb1, yt1], ['z', yb2, yt2]]) for (let k = 0.1; k < (axis === 'x' ? FP.z1 : FP.x1); k += SP.slab.s)
-      for (const [a, b] of runs(pieces, axis, k)) { bar(G.bars, axis, k, yb, a + e, b - e, SP.slab.d); bar(G.bars, axis, k, yt, a + e, b - e, SP.slab.d); }
+    let concrete = rects; for (const h of holes) concrete = concrete.flatMap(r => minus(r, h));
+    for (const r of concrete) solid(G, r, -SP.slab.h, 0);
+    const cv = SP.slab.cover; let pieces = rects; for (const h of holes) pieces = pieces.flatMap(r => minus(r, [h[0] - cv, h[1] - cv, h[2] + cv, h[3] + cv])); // bars keep their cover at openings
+    const c = SP.slab.cover + SP.slab.d / 2, yb1 = -SP.slab.h + c, yb2 = yb1 + SP.slab.d, yt1 = -SP.slab.cover - SP.slab.dT / 2, yt2 = yt1 - SP.slab.dT, e = 0.03;
+    for (const [axis, yb, yt] of [['x', yb1, yt1], ['z', yb2, yt2]]) {
+      for (let k = 0.1; k < (axis === 'x' ? FP.z1 : FP.x1); k += SP.slab.s) for (const [a, b] of runs(pieces, axis, k)) bar(G.bars, axis, k, yb, a + e, b - e, SP.slab.d);
+      for (let k = 0.1; k < (axis === 'x' ? FP.z1 : FP.x1); k += SP.slab.sT) for (const [a, b] of runs(pieces, axis, k)) bar(G.bars, axis, k, yt, a + e, b - e, SP.slab.dT);
+    }
+    // integrity bars: 2 + 2 bottom Ø16 straight through every column; punching studs in two rings around it
+    for (const [x0, z0, x1, z1] of COLC) { const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      for (const k of [-0.08, 0.08]) { for (const [a, b] of runs(pieces, 'x', cz + k, cx - 1.0, cx + 1.0)) bar(G.bars, 'x', cz + k, yb1 + 0.02, a + e, b - e, 0.016); for (const [a, b] of runs(pieces, 'z', cx + k, cz - 1.0, cz + 1.0)) bar(G.bars, 'z', cx + k, yb2 + 0.02, a + e, b - e, 0.016); }
+      for (const rr of [0.28, 0.40]) for (let i = 0; i < 12; i++) { const an = (i / 12) * Math.PI * 2, px = cx + Math.cos(an) * rr, pz = cz + Math.sin(an) * rr;
+        if (pieces.some(p => px > p[0] + 0.03 && px < p[2] - 0.03 && pz > p[1] + 0.03 && pz < p[3] - 0.03)) seg(G.stirs, [px, yb1 - 0.01, pz], [px, yt1 + 0.01, pz], 0.01); } }
     // extra top bars over every column (hogging and punching zone)
     for (const [x0, z0, x1, z1] of COLC) { const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, L = SP.slab.colL / 2;
-      for (let k = -0.4; k <= 0.4 + 1e-6; k += SP.slab.colS) { for (const [a, b] of runs(pieces, 'x', cz + k, cx - L, cx + L)) bar(G.bars, 'x', cz + k, yt1 - 0.02, a + e, b - e, SP.slab.colD); for (const [a, b] of runs(pieces, 'z', cx + k, cz - L, cz + L)) bar(G.bars, 'z', cx + k, yt2 - 0.02, a + e, b - e, SP.slab.colD); } }
+      for (let k = -SP.slab.colW / 2 + 0.05; k <= SP.slab.colW / 2 - 0.05 + 1e-6; k += SP.slab.colS) { for (const [a, b] of runs(pieces, 'x', cz + k, cx - L, cx + L)) bar(G.bars, 'x', cz + k, yt1 - 0.02, a + e, b - e, SP.slab.colD); for (const [a, b] of runs(pieces, 'z', cx + k, cz - L, cz + L)) bar(G.bars, 'z', cx + k, yt2 - 0.02, a + e, b - e, SP.slab.colD); } }
     // hidden beams on the grid lines: 4 + 4 bars and closed stirrups
-    const bw = (c) => (c < 1 || c > 9 ? 0.34 : 0.5), byb = -SP.slab.h + 0.035, byt = -0.035;
-    for (const [axis, lines] of [['x', GRIDZ], ['z', GRIDX]]) for (const c0 of lines) {
-      const w = bw(c0); for (const [a, b] of runs(pieces, axis, c0)) {
+    const bw = (c) => (c < 1 || c > 9 ? 0.32 : 0.5);
+    for (const [axis, lines] of [['x', GRIDZ.map(c => [c, -1e9, 1e9])], ['z', GRIDX]]) for (const [c0, lo, hi] of lines) {
+      const dy = axis === 'z' ? SP.beam.d : 0, byb = -SP.slab.h + SP.slab.cover + SP.beam.sd + SP.beam.d / 2 + dy, byt = -(SP.slab.cover + SP.beam.sd + SP.beam.d / 2) - dy;
+      const w = bw(c0); for (const [a, b] of runs(pieces, axis, c0, lo, hi)) {
         for (let i = 0; i < SP.beam.n; i++) { const o = -w / 2 + (w * i) / (SP.beam.n - 1); bar(G.bars, axis, c0 + o, byb, a + e, b - e, SP.beam.d); bar(G.bars, axis, c0 + o, byt, a + e, b - e, SP.beam.d); }
-        for (let t = a + 0.1; t < b - 0.05; t += SP.beam.s) { const P = (o, y) => (axis === 'x' ? [t, y, c0 + o] : [c0 + o, y, t]), h = w / 2 + 0.01;
+        const nearCol = (t) => COLC.some(([x0, z0, x1, z1]) => Math.hypot((axis === 'x' ? t : c0) - (x0 + x1) / 2, (axis === 'x' ? c0 : t) - (z0 + z1) / 2) < SP.beam.near);
+        for (let t = a + 0.1; t < b - 0.05; t += nearCol(t) ? SP.beam.sNear : SP.beam.s) { const P = (o, y) => (axis === 'x' ? [t, y, c0 + o] : [c0 + o, y, t]), h = w / 2 + 0.01;
           seg(G.stirs, P(-h, byb - 0.012), P(h, byb - 0.012), SP.beam.sd); seg(G.stirs, P(-h, byt + 0.012), P(h, byt + 0.012), SP.beam.sd); seg(G.stirs, P(-h, byb - 0.012), P(-h, byt + 0.012), SP.beam.sd); seg(G.stirs, P(h, byb - 0.012), P(h, byt + 0.012), SP.beam.sd); }
       }
     }
-    // trimming bars around openings: 2 + 2 Ø16 on each edge, 0.4 m past the corners
-    for (const h of holes) { for (const [axis, c, a, b] of [['x', h[1] - 0.05, h[0] - 0.4, h[2] + 0.4], ['x', h[3] + 0.05, h[0] - 0.4, h[2] + 0.4], ['z', h[0] - 0.05, h[1] - 0.4, h[3] + 0.4], ['z', h[2] + 0.05, h[1] - 0.4, h[3] + 0.4]])
-      for (const [p, q] of runs(pieces, axis, c, a, b)) { bar(G.bars, axis, c, yb1 + 0.03, p, q, 0.016); bar(G.bars, axis, c, yt1 - 0.03, p, q, 0.016); } }
+    // trimming bars around openings: 2 + 2 Ø16 on each edge (bottom and top), 0.4 m past the corners
+    for (const h of holes) { for (const [axis, edge, sgn, a, b] of [['x', h[1], -1, h[0] - 0.4, h[2] + 0.4], ['x', h[3], 1, h[0] - 0.4, h[2] + 0.4], ['z', h[0], -1, h[1] - 0.4, h[3] + 0.4], ['z', h[2], 1, h[1] - 0.4, h[3] + 0.4]]) {
+        // an edge facing another opening a few cm away (the shaft's south edge vs the stair well) is trimmed once, by the longer opening
+        if (holes.some(o => o !== h && (axis === 'x' ? Math.abs(o[sgn > 0 ? 1 : 3] - edge) < 0.15 : Math.abs(o[sgn > 0 ? 0 : 2] - edge) < 0.15) && (o[2] - o[0]) * (o[3] - o[1]) > (h[2] - h[0]) * (h[3] - h[1]))) continue;
+        for (const off of [0.05, 0.12]) { const c = edge + sgn * (cv + off); for (const [p, q] of runs(pieces, axis, c, a, b)) { bar(G.bars, axis, c, yb1 + 0.03, p, q, 0.016); bar(G.bars, axis, c, yt1 - 0.03, p, q, 0.016); } }
+      }
+      // diagonal Ø12 at each corner against corner cracking
+      for (const [cx, cz, sx, sz] of [[h[0], h[1], -1, -1], [h[2], h[1], 1, -1], [h[2], h[3], 1, 1], [h[0], h[3], -1, 1]]) {
+        const m = [cx + sx * 0.18, cz + sz * 0.18], o = 0.3 / Math.SQRT2; // 0.6 m bar across the corner, square to its bisector
+        if (pieces.some(pc => m[0] - o > pc[0] && m[0] + o < pc[2] && m[1] - o > pc[1] && m[1] + o < pc[3])) seg(G.bars, [m[0] - sx * o, yb1 + 0.05, m[1] + sz * o], [m[0] + sx * o, yb1 + 0.05, m[1] - sz * o], 0.012);
+      } }
   };
-  // ---- a column storey: core concrete + 8 bars (lapping 0.6 m into the storey above) + closed stirrups
-  const column = (G, [x0, z0, x1, z1], yBot, yTop, barTop, starter) => {
+  // ---- a column storey: core concrete + 8 bars (lapping 50Ø = 1.0 m into the storey above) + closed hoops and diamond ties
+  const column = (G, [x0, z0, x1, z1], yBot, yTop, barTop, starter, topHook) => {
     solid(G, [x0, z0, x1, z1], yBot, yTop);
-    const c = SP.col.cover + SP.col.sd + SP.col.d / 2, xs = [x0 + c, (x0 + x1) / 2, x1 - c], zs = [z0 + c, (z0 + z1) / 2, z1 - c];
-    for (const x of xs) for (const z of zs) if (!(x === xs[1] && z === zs[1])) { seg(G.bars, [x, starter ?? yBot, z], [x, barTop, z], SP.col.d); if (starter != null) seg(G.bars, [x, starter, z], [x + (x < (x0 + x1) / 2 ? -0.3 : 0.3), starter, z], SP.col.d); }
-    const i = SP.col.cover + SP.col.sd / 2;
-    for (let y = yBot + 0.05; y < yTop - 0.02;) {
+    const c = SP.col.cover + SP.col.sd + SP.col.d / 2, mxc = (x0 + x1) / 2, mzc = (z0 + z1) / 2, xs = [x0 + c, mxc, x1 - c], zs = [z0 + c, mzc, z1 - c];
+    const leg = (x, y, z, out) => { // 0.3 m hook leg: middle bars of the N/S faces turn along z, the rest along x; never past the raft's east edge
+      if (x === mxc) return [x, y, z + (z < mzc ? -1 : 1) * (out ? 0.3 : -0.3)];
+      let hx = x + (x < mxc ? -1 : 1) * (out ? 0.3 : -0.3); if (hx > FP.x1 - SP.raft.cover) hx = x - 0.25; return [hx, y, z];
+    };
+    for (const x of xs) for (const z of zs) if (!(x === mxc && z === mzc)) {
+      seg(G.bars, [x, starter ?? yBot, z], [x, barTop, z], SP.col.d);
+      if (starter != null) seg(G.bars, [x, starter, z], leg(x, starter, z, true), SP.col.d);
+      if (topHook) seg(G.bars, [x, barTop, z], leg(x, barTop, z, false), SP.col.d);
+    }
+    const i = SP.col.cover + SP.col.sd / 2, yTie = FH - 0.03; // ties run on through the slab joint
+    for (let y = yBot + 0.05; y < yTie;) {
       const a = [x0 + i, z0 + i], b = [x1 - i, z1 - i];
       seg(G.stirs, [a[0], y, a[1]], [b[0], y, a[1]], SP.col.sd); seg(G.stirs, [b[0], y, a[1]], [b[0], y, b[1]], SP.col.sd); seg(G.stirs, [b[0], y, b[1]], [a[0], y, b[1]], SP.col.sd); seg(G.stirs, [a[0], y, b[1]], [a[0], y, a[1]], SP.col.sd);
-      y += (y - yBot < SP.col.crit || yTop - y < SP.col.crit) ? SP.col.sCrit : SP.col.sMid;
+      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, yd = y + 0.012; // diamond tie through the four middle bars
+      seg(G.stirs, [mx, yd, a[1]], [b[0], yd, mz], SP.col.sd); seg(G.stirs, [b[0], yd, mz], [mx, yd, b[1]], SP.col.sd); seg(G.stirs, [mx, yd, b[1]], [a[0], yd, mz], SP.col.sd); seg(G.stirs, [a[0], yd, mz], [mx, yd, a[1]], SP.col.sd);
+      y += (y - yBot < Math.max(SP.col.crit, SP.col.lap) || yTop - y < SP.col.crit || y > yTop) ? SP.col.sCrit : SP.col.sMid; // dense along the bottom lap, the top critical zone and the joint
     }
   };
   // ---- floors
   for (const f of PROJECT.floors) {
     const G = mk(FLOOR[f].root); STR.groups[f] = G.g;
-    const top = f === TOP ? FH - SP.slab.h - 0.035 : FH - SP.slab.h + 0.6;      // bars lap 0.6 m into the storey above
+    const top = f === TOP ? FH - 0.035 : FH + SP.col.lap;      // bars lap 50Ø (≈1 m) into the storey above; at the top they hook into the roof slab
     if (f === 1) {
       // foundation: lean concrete, raft, column starters with 90° hooks; earth-retaining RC wall on the buried south side
       const RA = [-0.3, -0.3, FP.x1, FP.z1 + 0.3], rf0 = -0.1 - SP.raft.h, rf1 = -0.1;
@@ -1074,31 +1106,41 @@ function dolabStructureBuild() {
         const [a, b] = axis === 'x' ? [RA[0] + 0.05, RA[2] - 0.05] : [RA[1] + 0.05, RA[3] - 0.05];
         bar(G.bars, axis, k, rf0 + c + dy, a, b, SP.raft.d); bar(G.bars, axis, k, rf1 - c - dy, a, b, SP.raft.d);
       }
-      for (const r of COLC) column(G, r, rf1, FH - SP.slab.h, top, rf0 + c + 0.04);
+      for (const r of COLC) column(G, r, rf1, FH - SP.slab.h, top, rf0 + c + 0.04, f === TOP);
       const wz0 = FP.z1 - SP.wall.t, wz1 = FP.z1, wc = 0.035;
       for (const [x0, x1] of [[0.4, COLC[7][0]], [COLC[7][2], 9.6]]) {
         solid(G, [x0, wz0, x1, wz1], rf1, FH - SP.slab.h);
-        for (let x = x0 + 0.1; x < x1 - 0.05; x += SP.wall.s) for (const z of [wz0 + wc, wz1 - wc]) seg(G.bars, [x, rf0 + 0.1, z], [x, FH - SP.slab.h + 0.5, z], SP.wall.d);
-        for (let y = rf1 + 0.1; y < FH - SP.slab.h; y += SP.wall.s) for (const z of [wz0 + wc + SP.wall.d, wz1 - wc - SP.wall.d]) seg(G.stirs, [x0 + 0.03, y, z], [x1 - 0.03, y, z], SP.wall.d);
+        // vertical bars start in the raft and end with a hook in the floor-2 slab (no wall above them)
+        for (const [dz, sp, d] of [[wz1 - 0.05, SP.wall.sE, SP.wall.dE], [wz0 + wc, SP.wall.s, SP.wall.d]]) for (let x = x0 + 0.1; x < x1 - 0.05; x += sp) {
+          seg(G.bars, [x, rf0 + 0.1, dz], [x, FH - 0.035, dz], d); seg(G.bars, [x, FH - 0.035, dz], [x, FH - 0.035, dz - 0.4], d); }
+        for (let y = rf1 + 0.1; y < FH - SP.slab.h; y += SP.wall.s) for (const z of [wz0 + wc + SP.wall.d, wz1 - 0.05 - SP.wall.dE]) seg(G.stirs, [x0 + 0.03, y, z], [x1 - 0.03, y, z], SP.wall.dH);
       }
-      label(G.g, 0, [-0.3, rf0 - 0.05, 3.0], 'საძირკველი — მონოლითური ფილა', `სისქე ${SP.raft.h * 1000} მმ · ბეტონი ${SP.concF}<br>არმატურა Ø${SP.raft.d * 1000}/${SP.raft.s * 1000} ორ ფენად, ორივე მიმართულებით, ${SP.steel}<br>ქვეშ: ჰიდროიზოლაცია, მომზადება ${SP.lean} ${SP.raft.lean * 1000} მმ`, true);
-      label(G.g, 0, [2.6, 1.6, FP.z1 + 0.05], 'საყრდენი კედელი (მიწის მხარე)', `სისქე ${SP.wall.t * 1000} მმ · ბეტონი ${SP.concF}<br>Ø${SP.wall.d * 1000}/${SP.wall.s * 1000} ორივე მხარეს, ვერტიკალურად და ჰორიზონტალურად<br>გარედან ჰიდროიზოლაცია და დრენაჟი`);
+      label(G.g, 0, [-0.3, rf0 - 0.05, 3.0], 'საძირკველი — ფილოვანი, მონოლითური', `სისქე ${SP.raft.h * 1000} მმ · ბეტონი ${SP.concF}<br>Ø${SP.raft.d * 1000}/${SP.raft.s * 1000} ორ ფენად, ორივე მიმართულებით, ${SP.steel} · დამცავი შრე ${SP.raft.cover * 1000} მმ<br>ქვეშ: ჰიდროიზოლაცია, მომზადება ${SP.lean} ${SP.raft.lean * 1000} მმ<br>ერთ დონეზე (PN 01.01-09) · აღმოსავლეთით არ გადის — მეზობელი 20 სმ-შია`, true);
+      label(G.g, 0, [2.6, 1.6, FP.z1 + 0.05], 'საყრდენი კედელი (მიწის მხარე)', `სისქე ${SP.wall.t * 1000} მმ · ბეტონი ${SP.concF}<br>მიწის მხარეს Ø${SP.wall.dE * 1000}/${SP.wall.sE * 1000}, შიგნით Ø${SP.wall.d * 1000}/${SP.wall.s * 1000}, ჰორიზონტალურად Ø${SP.wall.dH * 1000}/${SP.wall.s * 1000}<br>ღეროები საძირკვლიდან გამოდის, ნაკერზე წყალშემაკავებელი ლენტი<br>გარედან ჰიდროიზოლაცია და დრენაჟი`);
     } else {
-      slab(G, PROJECT.slabs(f), [SHAFT]);
-      for (const r of COLC) column(G, r, 0, FH - SP.slab.h, top);
+      slab(G, [[0, 0, FP.x1, FP.z1]], f >= 3 ? [SHAFT, STAIR] : [SHAFT]); // same pieces as PROJECT.slabs(f), with the openings trimmed
+      for (const r of COLC) column(G, r, 0, FH - SP.slab.h, top, undefined, f === TOP);
     }
+    // suggested shear wall (დიაფრაგმა) in the blank east wall; on floor 1 only where the plan has no openings
+    const yb = f === 1 ? -0.1 : 0, sw = SP.shear, x0 = FP.x1 - sw.t, x1 = FP.x1, sc = 0.035;
+    for (const [z0, z1] of f === 1 ? [[0.4, 3.23]] : [[0.4, COLC[5][1]], [COLC[5][3], 9.65]]) {
+      solid(G, [x0, z0, x1, z1], yb, FH - SP.slab.h);
+      const wb = f === 1 ? -0.1 - SP.raft.h + 0.1 : yb, wt = f === TOP ? FH - 0.035 : FH - SP.slab.h + sw.lap;
+      for (const x of [x0 + sc, x1 - sc]) { for (let z = z0 + 0.1; z < z1 - 0.05; z += sw.s) seg(G.bars, [x, wb, z], [x, wt, z], sw.d); for (let y = yb + 0.1; y < FH - SP.slab.h; y += sw.s) seg(G.stirs, [x + (x < 9.9 ? 0.012 : -0.012), y, z0 + 0.03], [x + (x < 9.9 ? 0.012 : -0.012), y, z1 - 0.03], sw.d); }
+    }
+    label(G.g, f, [FP.x1 + 0.05, 1.4, f === 1 ? 1.8 : 7.6], 'დიაფრაგმა — მონოლითური კედელი (წინადადება)', `აღმოსავლეთის ყრუ კედელი ${SP.shear.t * 1000} მმ · Ø${SP.shear.d * 1000}/${SP.shear.s * 1000} ორივე მხარეს<br>მხოლოდ ერთ მხარეს კედელი შენობას მიწისძვრისას გრეხს — გადაწყვეტს კონსტრუქტორი${f === 1 ? '<br>1-ელ სართულზე ღიობები წყვეტს' : ''}`);
     const cc = COLC[2];
-    label(G.g, f, [cc[2], 2.2, cc[1] + 0.2], `კოლონა ${SP.col.size * 100}×${SP.col.size * 100} სმ (9 ცალი)`, `${SP.col.n}Ø${SP.col.d * 1000} ${SP.steel} · ბეტონი ${SP.conc}<br>მოჭიმი Ø${SP.col.sd * 1000}: ${SP.col.sCrit * 1000} მმ კვანძებთან (${SP.col.crit * 100} სმ), ${SP.col.sMid * 1000} მმ შუაში<br>დამცავი ფენა ${SP.col.cover * 1000} მმ · გადაბმა ზემოთ ≈60 სმ`, f === TOP);
+    label(G.g, f, [cc[2], 2.2, cc[1] + 0.2], `კოლონა ${SP.col.size * 100}×${SP.col.size * 100} სმ (9 ცალი)`, `${SP.col.n}Ø${SP.col.d * 1000} ${SP.steel} · ბეტონი ${SP.conc}<br>ხამუთი Ø${SP.col.sd * 1000}: ბიჯი ${SP.col.sCrit * 1000} მმ ქვედა ${SP.col.lap * 100} სმ-ზე (გადაბმის ზონა), ზედა ${SP.col.crit * 100} სმ-ზე და კვანძში; შუაში ${SP.col.sMid * 1000} მმ<br>შუა ღეროებზე რომბისებრი ხამუთი · კაუჭები 135°<br>დამცავი შრე ${SP.col.cover * 1000} მმ · გადაბმა 50Ø ≈ ${SP.col.lap} მ`); // floor views only: the building view keeps two cards (roof, foundation)
     if (f > 1) {
-      label(G.g, f, [1.6, -0.2, 3.2], `გადახურვის ფილა h=${SP.slab.h * 1000} მმ`, `ბეტონი ${SP.conc}<br>ბადე Ø${SP.slab.d * 1000}/${SP.slab.s * 1000} ქვემოთ და ზემოთ, ორივე მიმართულებით<br>კოლონებზე დამატებით ზემოთ Ø${SP.slab.colD * 1000}/${SP.slab.colS * 1000}, ${SP.slab.colL} × ${SP.slab.colL} მ<br>დამცავი ფენა ${SP.slab.cover * 1000} მმ`);
-      label(G.g, f, [7.8, -0.2, GRIDZ[1]], 'ფარული რიგელი (ფილის სისქეში)', `ბადის ღერძებზე · ${SP.beam.n}+${SP.beam.n}Ø${SP.beam.d * 1000}<br>მოჭიმი Ø${SP.beam.sd * 1000}/${SP.beam.s * 1000}<br>ფასადზე ჩამოშვებული კოჭი არ არის — მინა ჭერამდე ადის`);
-      label(G.g, f, [4.2, -0.2, 8.6], 'ღიობები ფილაში', `შახტა${f >= 3 ? ' და კიბის უჯრედი' : ''}: კიდეებზე დამატებით 2+2Ø16`);
+      label(G.g, f, [1.6, -0.2, 3.2], `გადახურვის ფილა h=${SP.slab.h * 1000} მმ`, `ბეტონი ${SP.conc} · ურიგელო გადახურვა<br>ქვედა ბადე Ø${SP.slab.d * 1000}/${SP.slab.s * 1000}, ზედა Ø${SP.slab.dT * 1000}/${SP.slab.sT * 1000}<br>კოლონებზე ზემოთ Ø${SP.slab.colD * 1000}/${SP.slab.colS * 1000}, ±${fmt(SP.slab.colL / 2)} მ კოლონის ღერძიდან · კოლონაში გამავალი 2+2Ø16<br>კოლონის გარშემო ჭრაზე არმატურა · დამცავი შრე ${SP.slab.cover * 1000} მმ`);
+      label(G.g, f, [7.8, -0.2, GRIDZ[1]], 'ფარული რიგელი (ფილის სისქეში)', `ბადის ღერძებზე · ${SP.beam.n}+${SP.beam.n}Ø${SP.beam.d * 1000}<br>ხამუთი Ø${SP.beam.sd * 1000}: ${SP.beam.sNear * 1000} მმ კოლონებთან, ${SP.beam.s * 1000} მმ შუაში<br>ფასადზე ჩამოშვებული კოჭი არ არის — მინა ჭერამდე ადის`);
+      label(G.g, f, [5.0, -0.2, f >= 3 ? 7.9 : 6.6], 'ღიობები ფილაში', `შახტა${f >= 3 ? ' და კიბის უჯრედი' : ''}: ყოველ კიდეზე 2Ø16 ქვემოთ და 2Ø16 ზემოთ, კუთხეებში დიაგონალური Ø12`);
     }
     finish(G);
   }
   // ---- roof slab
-  { const G = mk(ROOF); STR.groups.roof = G.g; slab(G, [[0, 0, FP.x1, FP.z1]], [[SHAFT[0], SHAFT[1], SHAFT[2], 6.85]]); finish(G);
-    label(G.g, 'roof', [8.6, 0.1, 1.0], 'სახურავის ფილა', `h=${SP.slab.h * 1000} მმ, არმირება იგივე · პარაპეტი — ბლოკი<br>ზემოთ: დახრილობის შრე, თბოიზოლაცია, ჰიდროიზოლაცია`); }
+  { const G = mk(ROOF); STR.groups.roof = G.g; slab(G, [[0, 0, FP.x1, FP.z1]], [SHAFT]); finish(G);
+    label(G.g, 'roof', [0.6, 0.1, 9.4], 'სახურავის ფილა', `h=${SP.slab.h * 1000} მმ, არმირება იგივე · პარაპეტი — ბლოკი<br>ზემოთ: დახრილობის შრე, თბოიზოლაცია, ჰიდროიზოლაცია`, true); }
   refreshShadows();
 }
 
@@ -1126,13 +1168,16 @@ function dolabProjectTab() {
   <h3>კონსტრუქცია (საილუსტრაციო)</h3><p>ჩართეთ ფენა „კონსტრუქცია“: ჩანს მონოლითური კარკასი — საძირკვლის ფილა, საყრდენი კედელი, 9 კოლონა, გადახურვები ფარული რიგელებით — და მათი არმატურა. ბეტონი გამჭვირვალედაა ნაჩვენები, რომ არმატურა გამოჩნდეს.</p>
   <table class="tbl"><tbody>
   <tr><td>ბეტონი</td><td>${STRSPEC.conc}; საძირკველი და საყრდენი კედელი ${STRSPEC.concF}; მომზადება ${STRSPEC.lean}</td></tr>
-  <tr><td>არმატურა</td><td>${STRSPEC.steel}; მოჭიმები ${STRSPEC.stir}</td></tr>
-  <tr><td>კოლონა</td><td>${STRSPEC.col.size * 100}×${STRSPEC.col.size * 100} სმ, ${STRSPEC.col.n}Ø${STRSPEC.col.d * 1000}, მოჭიმი Ø${STRSPEC.col.sd * 1000} — ${STRSPEC.col.sCrit * 1000} მმ კვანძებთან, ${STRSPEC.col.sMid * 1000} მმ შუაში</td></tr>
-  <tr><td>გადახურვა</td><td>ფილა ${STRSPEC.slab.h * 1000} მმ, Ø${STRSPEC.slab.d * 1000}/${STRSPEC.slab.s * 1000} ქვემოთ და ზემოთ, კოლონებზე დამატებით Ø${STRSPEC.slab.colD * 1000}/${STRSPEC.slab.colS * 1000}</td></tr>
-  <tr><td>ფარული რიგელი</td><td>ბადის ღერძებზე, ${STRSPEC.beam.n}+${STRSPEC.beam.n}Ø${STRSPEC.beam.d * 1000}, მოჭიმი Ø${STRSPEC.beam.sd * 1000}/${STRSPEC.beam.s * 1000}</td></tr>
-  <tr><td>საძირკველი</td><td>ფილა ${STRSPEC.raft.h * 1000} მმ, Ø${STRSPEC.raft.d * 1000}/${STRSPEC.raft.s * 1000} ორ ფენად; მომზადება ${STRSPEC.raft.lean * 1000} მმ; ჰიდროიზოლაცია</td></tr>
-  <tr><td>საყრდენი კედელი</td><td>${STRSPEC.wall.t * 1000} მმ, Ø${STRSPEC.wall.d * 1000}/${STRSPEC.wall.s * 1000} ორივე მხარეს</td></tr>
+  <tr><td>არმატურა</td><td>${STRSPEC.steel}; ხამუთები ${STRSPEC.stir}</td></tr>
+  <tr><td>კოლონა</td><td>${STRSPEC.col.size * 100}×${STRSPEC.col.size * 100} სმ, ${STRSPEC.col.n}Ø${STRSPEC.col.d * 1000}; ხამუთი Ø${STRSPEC.col.sd * 1000} — ბიჯი ${STRSPEC.col.sCrit * 1000} მმ ქვედა ${STRSPEC.col.lap * 100} სმ-ზე (გადაბმის ზონა), ზედა ${STRSPEC.col.crit * 100} სმ-ზე და კვანძში, ${STRSPEC.col.sMid * 1000} მმ შუაში, რომბისებრი ხამუთით; კაუჭები 135°; გადაბმა 50Ø</td></tr>
+  <tr><td>გადახურვა</td><td>ფილა ${STRSPEC.slab.h * 1000} მმ; ქვედა ბადე Ø${STRSPEC.slab.d * 1000}/${STRSPEC.slab.s * 1000}, ზედა Ø${STRSPEC.slab.dT * 1000}/${STRSPEC.slab.sT * 1000}; კოლონებზე ზემოთ Ø${STRSPEC.slab.colD * 1000}/${STRSPEC.slab.colS * 1000}, ±${fmt(STRSPEC.slab.colL / 2)} მ; კოლონაში გამავალი 2+2Ø16; ჭრაზე არმატურა კოლონის გარშემო</td></tr>
+  <tr><td>ფარული რიგელი</td><td>ბადის ღერძებზე, ${STRSPEC.beam.n}+${STRSPEC.beam.n}Ø${STRSPEC.beam.d * 1000}; ხამუთი Ø${STRSPEC.beam.sd * 1000} — ${STRSPEC.beam.sNear * 1000} მმ კოლონებთან, ${STRSPEC.beam.s * 1000} მმ შუაში</td></tr>
+  <tr><td>საძირკველი</td><td>ფილოვანი, ${STRSPEC.raft.h * 1000} მმ, Ø${STRSPEC.raft.d * 1000}/${STRSPEC.raft.s * 1000} ორ ფენად; მომზადება ${STRSPEC.raft.lean * 1000} მმ; ჰიდროიზოლაცია; დამცავი შრე ${STRSPEC.raft.cover * 1000} მმ</td></tr>
+  <tr><td>საყრდენი კედელი</td><td>${STRSPEC.wall.t * 1000} მმ; მიწის მხარეს Ø${STRSPEC.wall.dE * 1000}/${STRSPEC.wall.sE * 1000}, შიგნით Ø${STRSPEC.wall.d * 1000}/${STRSPEC.wall.s * 1000}, ჰორიზონტალურად Ø${STRSPEC.wall.dH * 1000}/${STRSPEC.wall.s * 1000}</td></tr>
+  <tr><td>დიაფრაგმა (წინადადება)</td><td>აღმოსავლეთის ყრუ კედელი, ${STRSPEC.shear.t * 1000} მმ, Ø${STRSPEC.shear.d * 1000}/${STRSPEC.shear.s * 1000} ორივე მხარეს</td></tr>
+  <tr><td>სეისმურობა</td><td>PN 01.01-09: ადგილის მიხედვით 7–9 ბალი (თბილისი — 8 ბალი, A = 0,17g); III კატეგორიის გრუნტზე +1 ბალი</td></tr>
   </tbody></table>
+  <div class="issue"><b>მიწისძვრა: მხოლოდ ფილა და კოლონები საკმარისი არ არის</b>ურიგელო ფილა ფარული რიგელებით, როგორც ერთადერთი სეისმომედეგი სისტემა, სუსტია — PN 01.01-09 ასეთ კარკასს დიაფრაგმებით ან ბირთვით ითვალისწინებს. ბუნებრივი ადგილი აღმოსავლეთის ყრუ კედელია (ნაჩვენებია როგორც წინადადება), მაგრამ კედელი მხოლოდ ერთ მხარეს შენობას მიწისძვრისას გრეხს. საჭიროა კონსტრუქტორის გაანგარიშება: მაგალითად, კიბის უჯრედის ბირთვი ან კედლის მონაკვეთები სხვა ფასადებზეც — ეს მინის ფასადზეც აისახება.</div>
   <div class="issue"><b>ეს ნახაზი არ არის</b>მნიშვნელობები ტიპურია 4-სართულიანი მონოლითური კარკასისთვის სეისმურ ზონაში და მხოლოდ საჩვენებელია. რეალური ზომები და არმირება კონსტრუქტორის გაანგარიშებითა და ნახაზით უნდა იყოს. კოლონების ადგილი ვარაუდით დავსვი. ფასადზე ჩამოშვებული კოჭი არ ვაჩვენე, რადგან მინა ჭერამდე ადის; თუ კონსტრუქტორი კოჭს მოითხოვს, ფანჯრის ზედა ნიშნული დაბლა ჩამოვა.</div>
   <h3>რა გავაუმჯობესე</h3>
   <div class="change"><b>ტუალეტები ერთ ვერტიკალურ შახტაზე</b>გეგმაზე პირველი სართულის სააბაზანოები ზედა სართულების სააბაზანოების ქვეშ არ იყო. რვავე ტუალეტი ახლა ერთ საერთო შახტასთანაა (კანალიზაციის სტოიაკი Ø110, წყალი, ვენტილაცია) ბინებს შორის კედელთან: სართ. 2–4-ზე ტუალეტი სააბაზანოს სამხრეთ კუთხეშია, სართ. 1-ზე — ჩრდილოეთ კუთხეში, შახტა კი ორ სამზარეულოს შორის ჩადის. ჩართეთ „ინჟინერია“.</div>
